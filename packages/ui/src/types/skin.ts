@@ -1,7 +1,7 @@
 // ─── Skin / layout types ──────────────────────────────────────────────────────
 
 export type PanelPosition = "left" | "right" | "top" | "bottom" | "center";
-export type LayoutMode = "sidebar-left" | "sidebar-right" | "bottom-drawer" | "zen";
+export type LayoutMode = "sidebar-left" | "sidebar-right" | "bottom-drawer" | "zen" | "magazine";
 
 export interface PanelConfig {
   id: string;

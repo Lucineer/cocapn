@@ -32,6 +32,7 @@ import {
 import { ModuleManager } from "./modules/manager.js";
 import { FleetKeyManager } from "./security/fleet.js";
 import { Brain } from "./brain/index.js";
+import { Publisher } from "./publishing/publisher.js";
 import type { BridgeConfig } from "./config/types.js";
 
 // ─── AdmiralClient (optional import — avoids hard dep on cloud-agents pkg) ────
@@ -81,6 +82,7 @@ export class Bridge {
   private fleetKeys:     FleetKeyManager;
   private fleetKey:      string | undefined;
   private brain:         Brain;
+  private publisher:     Publisher | undefined;
 
   constructor(options: BridgeOptions) {
     this.options    = options;
@@ -173,6 +175,19 @@ export class Bridge {
     this.sync.startTimers();
     this.watcher.start();
     this.server.start();
+
+    // ── auto-publisher integration ───────────────────────────────────────────
+    const publisherMod = this.modules.get("auto-publisher");
+    if (publisherMod?.status === "enabled") {
+      this.publisher = new Publisher(
+        {
+          privateRepoRoot: this.options.privateRepoRoot,
+          publicRepoRoot:  this.options.publicRepoRoot,
+        },
+        this.sync
+      );
+      console.info("[bridge] auto-publisher active — writing to:", this.options.publicRepoRoot);
+    }
 
     // ── Git sync event logging ───────────────────────────────────────────────
 

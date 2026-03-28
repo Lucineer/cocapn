@@ -1,0 +1,16 @@
+name: auto-publisher
+version: 0.1.0
+type: integration
+description: >
+  Automatically sanitizes and publishes daily updates from the private repo to
+  the public repo after every commit that touches wiki pages or tasks.
+cocapn: ">=0.1.0"
+dependencies: []
+
+hooks:
+  install: hooks/install.js
+  enable: hooks/enable.js
+  post-commit: hooks/post-commit.js
+
+integration:
+  webhooks: []

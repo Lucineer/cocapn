@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { useBridgeContext } from "@/contexts/BridgeContext.js";
 import { useSkin } from "@/components/DomainSkin.js";
-import { ChatPanel }   from "@/components/ChatPanel.js";
-import { Terminal }    from "@/components/Terminal.js";
-import { ModulePanel } from "@/components/ModulePanel.js";
+import { ChatPanel }      from "@/components/ChatPanel.js";
+import { Terminal }       from "@/components/Terminal.js";
+import { ModulePanel }    from "@/components/ModulePanel.js";
+import { MagazineLayout } from "@/layouts/MagazineLayout.js";
+import { useUpdates }     from "@/hooks/useUpdates.js";
 import type { BridgeStatus, SessionInfo, AgentInfo } from "@/types/bridge.js";
 import type { LayoutMode, PanelConfig } from "@/types/skin.js";
 
@@ -100,7 +102,7 @@ function FleetPill({ domains }: { domains: string[] }) {
 
 // ─── Header ───────────────────────────────────────────────────────────────────
 
-type PanelId = "chat" | "terminal" | "modules";
+type PanelId = "chat" | "terminal" | "modules" | "updates";
 
 interface HeaderProps {
   domain: string;
@@ -121,7 +123,7 @@ function Header({ domain, activePanel, onPanelChange, fleetDomains }: HeaderProp
       <div className="flex-1" />
       {/* Mobile panel switcher */}
       <nav className="flex md:hidden gap-1">
-        {(["chat", "terminal", "modules"] as PanelId[]).map((id) => (
+        {(["chat", "terminal", "modules", "updates"] as PanelId[]).map((id) => (
           <button
             key={id}
             onClick={() => onPanelChange(id)}
@@ -157,6 +159,7 @@ function Sidebar({ activePanel, onPanelChange, agents, sessions }: SidebarProps)
     { id: "chat",     label: "Chat",     hotkey: "1" },
     { id: "terminal", label: "Terminal", hotkey: "2" },
     { id: "modules",  label: "Modules",  hotkey: "3" },
+    { id: "updates",  label: "Updates",  hotkey: "4" },
   ];
 
   return (
@@ -276,6 +279,10 @@ export function App() {
   const [agents,       setAgents]       = useState<AgentInfo[]>([]);
   const [sessions,     setSessions]     = useState<SessionInfo[]>([]);
 
+  // Updates feed — reads from /updates/index.json on the public repo origin.
+  // Works without a bridge connection; always available in magazine mode.
+  const { entries: updates, loading: updatesLoading, error: updatesError, refresh: refreshUpdates } = useUpdates();
+
   const { mode, terminalHeight, terminalPanel } = buildLayout(
     layout?.mode,
     layout?.panels
@@ -291,6 +298,7 @@ export function App() {
       if (e.key === "1") setActivePanel("chat");
       if (e.key === "2") setActivePanel("terminal");
       if (e.key === "3") setActivePanel("modules");
+      if (e.key === "4") setActivePanel("updates");
       if (e.key === "`") setTermOpen((v) => !v);
     };
     window.addEventListener("keydown", handler);
@@ -331,11 +339,46 @@ export function App() {
 
   const defaultAgent = config?.agents?.default ?? "claude";
 
+  const magazinePanel = (
+    <MagazineLayout
+      entries={updates}
+      loading={updatesLoading}
+      error={updatesError}
+      onRefresh={refreshUpdates}
+      className="h-full"
+    />
+  );
+
   const panelContent: Record<PanelId, ReactNode> = {
     chat:     <ChatPanel defaultAgentId={defaultAgent} className="h-full" />,
     terminal: <Terminal className="h-full" />,
     modules:  <ModulePanel className="h-full" />,
+    updates:  magazinePanel,
   };
+
+  // Updates panel doesn't require a bridge connection — it reads from GitHub Pages.
+  const mainContent = (activePanel: PanelId) =>
+    activePanel === "updates" || bridge.status !== "disconnected"
+      ? panelContent[activePanel]
+      : <ConnectBanner onConnect={handleConnect} />;
+
+  // ── Magazine mode (full-screen updates feed, no sidebar) ─────────────────
+
+  if (mode === "magazine") {
+    return (
+      <div className="flex flex-col h-dvh overflow-hidden bg-bg">
+        <Header
+          domain={domain}
+          activePanel={activePanel}
+          onPanelChange={setActivePanel}
+          fleetDomains={fleetDomains}
+        />
+        <main className="flex-1 overflow-hidden">
+          {magazinePanel}
+        </main>
+      </div>
+    );
+  }
 
   // ── Zen mode (no sidebar, no terminal drawer) ─────────────────────────────
 
@@ -349,9 +392,7 @@ export function App() {
           fleetDomains={fleetDomains}
         />
         <main className="flex-1 overflow-hidden">
-          {bridge.status === "disconnected"
-            ? <ConnectBanner onConnect={handleConnect} />
-            : panelContent[activePanel]}
+          {mainContent(activePanel)}
         </main>
       </div>
     );
@@ -369,9 +410,7 @@ export function App() {
           fleetDomains={fleetDomains}
         />
         <main className="flex-1 overflow-hidden">
-          {bridge.status === "disconnected"
-            ? <ConnectBanner onConnect={handleConnect} />
-            : panelContent[activePanel]}
+          {mainContent(activePanel)}
         </main>
         {terminalPanel && (
           <BottomDrawer
@@ -405,9 +444,7 @@ export function App() {
         />
         <div className="flex flex-col flex-1 overflow-hidden">
           <main className="flex-1 overflow-hidden">
-            {bridge.status === "disconnected"
-              ? <ConnectBanner onConnect={handleConnect} />
-              : panelContent[activePanel]}
+            {mainContent(activePanel)}
           </main>
           {terminalPanel && (
             <BottomDrawer

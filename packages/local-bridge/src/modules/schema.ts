@@ -5,10 +5,12 @@
 export type ModuleType = "skin" | "agent" | "tool" | "integration";
 
 export interface ModuleHooks {
-  install:  string | undefined;
-  enable:   string | undefined;
-  disable:  string | undefined;
-  update:   string | undefined;
+  install:       string | undefined;
+  enable:        string | undefined;
+  disable:       string | undefined;
+  update:        string | undefined;
+  /** Script to run after every git commit in the private repo */
+  "post-commit": string | undefined;
 }
 
 export interface SkinConfig {

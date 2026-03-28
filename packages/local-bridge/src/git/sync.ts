@@ -18,11 +18,15 @@ import type { BridgeConfig } from "../config/types.js";
 const PULL_INTERVAL_MS = 30_000;
 
 export type SyncEventMap = {
-  committed: [message: string, files: string[]];
-  pushed: [];
-  pulled: [];
-  conflict: [files: string[]];
-  error: [err: Error];
+  committed:    [message: string, files: string[]];
+  /** Fires immediately before git add + commit — files are the candidates */
+  "pre-commit": [files: string[]];
+  /** Fires immediately after a successful commit (same payload as `committed`) */
+  "post-commit":[message: string, files: string[]];
+  pushed:       [];
+  pulled:       [];
+  conflict:     [files: string[]];
+  error:        [err: Error];
 };
 
 export class GitSync extends EventEmitter<SyncEventMap> {
@@ -99,9 +103,11 @@ export class GitSync extends EventEmitter<SyncEventMap> {
         : `Cocapn: ${changed.slice(0, 3).join(", ")}${changed.length > 3 ? ` +${changed.length - 3} more` : ""}`;
 
     try {
+      this.emit("pre-commit", changed);
       await this.git.add(changed);
       await this.git.commit(autoMessage);
       this.emit("committed", autoMessage, changed);
+      this.emit("post-commit", autoMessage, changed);
 
       if (this.config.sync.autoPush) {
         await this.push();

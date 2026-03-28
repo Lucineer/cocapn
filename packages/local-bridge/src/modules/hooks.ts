@@ -11,7 +11,7 @@ import { join } from "path";
 import { buildSandboxEnv } from "./sandbox.js";
 import type { ModuleType } from "./schema.js";
 
-export type HookName = "install" | "enable" | "disable" | "update";
+export type HookName = "install" | "enable" | "disable" | "update" | "post-commit";
 export type OutputCb = (line: string, stream: "stdout" | "stderr") => void;
 
 const HOOK_TIMEOUT_MS = 60_000; // 1 minute max per hook

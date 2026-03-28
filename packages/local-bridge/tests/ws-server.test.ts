@@ -273,7 +273,7 @@ describe("BridgeServer", () => {
 
     await closeClient(ws);
     expect(response.ok).toBe(false);
-    expect(response.error).toMatch(/outside repo root/);
+    expect(response.error).toMatch(/Unsafe path rejected/);
   });
 
   it("A2A_REQUEST returns routed=false when no agent available", async () => {

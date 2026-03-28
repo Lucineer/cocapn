@@ -9,3 +9,7 @@ export { Brain } from "./brain/index.js";
 export type { WikiPage, Task } from "./brain/index.js";
 export { ChatRouter } from "./ws/chat-router.js";
 export type { ParsedMessage, RoutingRule as ChatRoutingRule } from "./ws/chat-router.js";
+export { Publisher } from "./publishing/publisher.js";
+export type { PublisherOptions } from "./publishing/publisher.js";
+export { Sanitizer } from "./publishing/sanitizer.js";
+export type { PublicTask, Digest } from "./publishing/sanitizer.js";
