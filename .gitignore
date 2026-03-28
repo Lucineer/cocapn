@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.cjs
+*.js.map
+*.d.ts.map
+.env
+.env.*
+*.secret.yml
+secrets/*.yml
+!secrets/*.yml.example
+*.age
+.DS_Store
