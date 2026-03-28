@@ -136,11 +136,11 @@ describe("AuditLogger", () => {
     const logger = new AuditLogger(repoDir);
     logger.log({ action: "auth.connect", agent: undefined, user: undefined,
       command: undefined, files: undefined, result: "ok",
-      detail: "Bearer ghp_abcdefghijklmnopqrstuvwxyz0123456789", durationMs: undefined });
+      detail: "Bearer ghp_TESTTESTTESTTESTTESTTESTTESTTESTTEST", durationMs: undefined });
 
     const line = JSON.parse(readFileSync(join(repoDir, "cocapn", "audit.log"), "utf8").trim());
     expect(line.detail).toContain("Bearer ***");
-    expect(line.detail).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz");
+    expect(line.detail).not.toContain("ghp_TESTTEST");
   });
 
   it("start() records duration", async () => {
@@ -192,7 +192,7 @@ describe("maskSecrets", () => {
   });
 
   it("masks Bearer token", () => {
-    expect(maskSecrets("Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig")).toContain("Bearer ***");
+    expect(maskSecrets("Authorization: Bearer eyJTESTTESTTEST.TESTTESTTEST.TESTTEST")).toContain("Bearer ***");
   });
 });
 

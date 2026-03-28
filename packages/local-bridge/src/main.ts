@@ -16,6 +16,7 @@ import { Bridge } from "./bridge.js";
 import { buildModuleCommand } from "./cli/module.js";
 import { buildSecretCommand } from "./cli/secret.js";
 import { buildTokenCommand }  from "./cli/token.js";
+import { buildInitCommand }   from "./cli/init.js";
 
 const program = new Command();
 
@@ -96,6 +97,7 @@ program
     }
   });
 
+program.addCommand(buildInitCommand());
 program.addCommand(buildModuleCommand());
 program.addCommand(buildSecretCommand());
 program.addCommand(buildTokenCommand());
