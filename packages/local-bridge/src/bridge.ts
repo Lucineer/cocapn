@@ -41,6 +41,7 @@ import { SelfAssembler, SelfAssembler as AssemblySystem } from "./assembly/index
 import { CloudConnector, type CloudConnectorConfig } from "./cloud-bridge/connector.js";
 import { LLMRouter, type LLMRouterConfig } from "./llm/index.js";
 import { PersonalityManager } from "./personality/index.js";
+import { Telemetry, getSystemProperties } from "./telemetry/index.js";
 import type { BridgeConfig } from "./config/types.js";
 import type { AssemblyResult } from "./assembly/index.js";
 
@@ -100,6 +101,7 @@ export class Bridge {
   private cloudConnector: CloudConnector | undefined;
   private llmRouter:     LLMRouter | undefined;
   private personalityManager: PersonalityManager;
+  private telemetry:      Telemetry;
 
   constructor(options: BridgeOptions) {
     this.options    = options;
@@ -155,6 +157,9 @@ export class Bridge {
     // Initialize personality manager
     this.personalityManager = new PersonalityManager(this.brain, options.privateRepoRoot);
 
+    // Initialize telemetry (opt-in, off by default)
+    this.telemetry = new Telemetry();
+
     this.router = new AgentRouter(
       {
         rules:         [],
@@ -200,6 +205,13 @@ export class Bridge {
     console.info(`[bridge] Repo:      ${this.options.privateRepoRoot}`);
     console.info(`[bridge] Auth:      ${this.options.skipAuth ? "disabled" : "GitHub PAT"}`);
     console.info(`[bridge] Cloud:     ${this.cloudAdapters ? "enabled" : "local-only"}`);
+    console.info(`[bridge] Telemetry: ${this.telemetry.isEnabled() ? "enabled" : "disabled"}`);
+
+    // Track bridge_start telemetry event
+    this.telemetry.track("bridge_start", {
+      ...getSystemProperties(),
+      mode: this.config.config.mode,
+    });
 
     // Run self-assembly on first run
     console.info("[bridge] Running self-assembly…");
@@ -306,6 +318,7 @@ export class Bridge {
     await this.watcher.stop();
     await this.spawner.stopAll();
     this.cloudConnector?.destroy();
+    await this.telemetry.shutdown();
     await this.server.stop();
     this.secrets.clearCache();
     console.info("[bridge] Stopped.");
@@ -316,6 +329,7 @@ export class Bridge {
   getCloudAdapters(): CloudAdapterRegistry | undefined { return this.cloudAdapters; }
   getAssembly():    AssemblyResult | undefined { return this.assembly; }
   getLLMRouter():   LLMRouter | undefined { return this.llmRouter; }
+  getTelemetry():   Telemetry            { return this.telemetry; }
 
   // ---------------------------------------------------------------------------
   // LLM initialization

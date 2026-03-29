@@ -31,6 +31,7 @@ import { createHealthCommand } from "./commands/health.js";
 import { createPluginCommand } from "./commands/plugin.js";
 import { createPersonalityCommand } from "./commands/personality.js";
 import { createRunCommand } from "./commands/run.js";
+import { createTelemetryCommand } from "./commands/telemetry.js";
 
 const VERSION = "0.1.0";
 
@@ -65,6 +66,9 @@ export function createCLI(): Command {
 
   // CI commands
   program.addCommand(createRunCommand());
+
+  // Telemetry commands
+  program.addCommand(createTelemetryCommand());
 
   // Analysis commands
   program.addCommand(createTreeCommand());
