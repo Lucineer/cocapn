@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://cocapn.io/schemas/module-manifest.schema.json",
   "title": "Module Manifest",
   "description": "Validates module.yml files that declare a module's identity, type, dependencies, and exported capabilities.",

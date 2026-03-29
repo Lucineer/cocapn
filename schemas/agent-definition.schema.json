@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://cocapn.io/schemas/agent-definition.schema.json",
   "title": "Agent Definition",
   "description": "Validates agent configuration files ([name].agent.ts or [name].agent.yml) that define how an agent is spawned, connected, and what it can do.",

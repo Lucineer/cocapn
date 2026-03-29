@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://cocapn.io/schemas/a2a-agent-card.schema.json",
   "title": "A2A Agent Card",
   "description": "Validates Agent-to-Agent (A2A) protocol agent cards that advertise an agent's identity, endpoint, and skills to other agents in the system.",
