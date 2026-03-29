@@ -28,6 +28,8 @@ import { createTreeCommand } from "./commands/tree.js";
 import { createGraphCommand } from "./commands/graph.js";
 import { createTokensCommand } from "./commands/tokens.js";
 import { createHealthCommand } from "./commands/health.js";
+import { createPluginCommand } from "./commands/plugin.js";
+import { createPersonalityCommand } from "./commands/personality.js";
 
 const VERSION = "0.1.0";
 
@@ -53,6 +55,12 @@ export function createCLI(): Command {
 
   // Template commands
   program.addCommand(createTemplateCommand());
+
+  // Plugin commands
+  program.addCommand(createPluginCommand());
+
+  // Personality commands
+  program.addCommand(createPersonalityCommand());
 
   // Analysis commands
   program.addCommand(createTreeCommand());
