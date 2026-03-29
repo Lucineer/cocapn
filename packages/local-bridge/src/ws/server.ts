@@ -460,9 +460,9 @@ export class BridgeServer extends EventEmitter<BridgeServerEventMap> {
         }
         const tenant = await registry.createTenant({
           name: data.name,
-          plan: data.plan as "free" | "pro" | "enterprise" | undefined,
-          config: data.config as Record<string, unknown> | undefined,
-          allowedOrigins: data.allowedOrigins as string[] | undefined,
+          ...(data.plan !== undefined ? { plan: data.plan as "free" | "pro" | "enterprise" } : {}),
+          ...(data.config !== undefined ? { config: data.config as Partial<import("../multi-tenant/types.js").TenantConfig> } : {}),
+          ...(data.allowedOrigins !== undefined ? { allowedOrigins: data.allowedOrigins as string[] } : {}),
         });
         if (tBridge) {
           await tBridge.initializeTenant(tenant.id);
@@ -491,12 +491,12 @@ export class BridgeServer extends EventEmitter<BridgeServerEventMap> {
       if (segments.length === 1 && method === "PUT") {
         const body = await readBody(req);
         const data = JSON.parse(body) as Record<string, unknown>;
-        const updated = await registry.updateTenant(tenantId, {
-          name: data.name as string | undefined,
-          plan: data.plan as "free" | "pro" | "enterprise" | undefined,
-          config: data.config as Record<string, unknown> | undefined,
-          allowedOrigins: data.allowedOrigins as string[] | undefined,
-        });
+        const updates: Record<string, unknown> = {};
+        if (data.name !== undefined) updates.name = data.name;
+        if (data.plan !== undefined) updates.plan = data.plan;
+        if (data.config !== undefined) updates.config = data.config;
+        if (data.allowedOrigins !== undefined) updates.allowedOrigins = data.allowedOrigins;
+        const updated = await registry.updateTenant(tenantId, updates as Parameters<typeof registry.updateTenant>[1]);
         setJson(200, { ok: true, tenant: updated });
         return;
       }

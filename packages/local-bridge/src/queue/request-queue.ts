@@ -214,6 +214,9 @@ export class RequestQueue {
     this.processing = true;
 
     while (!this.shutdownRequested) {
+      // Check global concurrency limit
+      if (this.running.size >= this.config.maxConcurrency) break;
+
       const next = this.pickNext();
       if (!next) break;
 
@@ -313,8 +316,9 @@ export class RequestQueue {
 
   private scheduleProcess(): void {
     if (this.processing || this.shutdownRequested) return;
-    // Use setImmediate to avoid stack overflow on rapid enqueue
-    setImmediate(() => {
+    // Use microtask to avoid stack overflow on rapid enqueue
+    // queueMicrotask works reliably with vi.useFakeTimers() in tests
+    queueMicrotask(() => {
       if (!this.shutdownRequested) {
         this.process().catch(() => { /* handled internally */ });
       }

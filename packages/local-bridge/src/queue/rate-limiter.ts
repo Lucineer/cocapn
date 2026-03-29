@@ -85,12 +85,10 @@ export class LLMRateLimiter {
    * Halves the rate limit and resets the bucket.
    */
   onRateLimit(provider: string): void {
-    const bucket = this.buckets.get(provider);
-    if (bucket) {
-      bucket.maxTokens = Math.max(1, Math.floor(bucket.maxTokens / 2));
-      bucket.tokens = 0;
-      bucket.refillRate = bucket.maxTokens / 60_000;
-    }
+    const bucket = this.getOrCreateBucket(provider);
+    bucket.maxTokens = Math.max(1, Math.floor(bucket.maxTokens / 2));
+    bucket.tokens = 0;
+    bucket.refillRate = bucket.maxTokens / 60_000;
   }
 
   /**
@@ -111,8 +109,8 @@ export class LLMRateLimiter {
    * Get the current effective rate limit (requests per minute) for a provider.
    */
   getEffectiveRateLimit(provider: string): number {
-    const bucket = this.buckets.get(provider);
-    return bucket?.maxTokens ?? (this.providerDefaults[provider] ?? 60);
+    const bucket = this.getOrCreateBucket(provider);
+    return bucket.maxTokens;
   }
 
   /**
