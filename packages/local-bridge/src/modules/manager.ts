@@ -293,6 +293,7 @@ export class ModuleManager extends EventEmitter<ModuleManagerEventMap> {
       agent:       raw.agent,
       tool:        raw.tool,
       integration: raw.integration,
+      handoff:     raw.handoff,
     };
   }
 

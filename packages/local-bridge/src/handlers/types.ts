@@ -26,6 +26,7 @@ import type { TokenTracker } from "../metrics/token-tracker.js";
 import type { SkillLoader } from "../skills/loader.js";
 import type { SkillDecisionTree } from "../skills/decision-tree.js";
 import type { RepoGraph } from "../graph/index.js";
+import type { HandoffProcessor } from "../handoff/processor.js";
 
 /**
  * Everything a handler needs to do its job.
@@ -49,6 +50,7 @@ export interface HandlerContext {
   readonly skillLoader: SkillLoader | undefined;
   readonly decisionTree: SkillDecisionTree | undefined;
   readonly repoGraph: RepoGraph | undefined;
+  readonly handoffProcessor: HandoffProcessor | undefined;
 
   // Mutable — lazily created
   getModuleManager(): ModuleManager;
