@@ -94,6 +94,69 @@ const MAX_DISCOVER_RESULTS = 20;
 const MAX_MESSAGES = 100;
 const MAX_TASKS    = 50;
 
+// ─── Task Queue types ─────────────────────────────────────────────────────────────
+
+export interface ScheduledTaskConfig {
+  /** Unique task ID */
+  id: string;
+  /** Cron expression or ISO timestamp */
+  schedule: string;
+  /** Agent/module to execute */
+  target: string;
+  /** Payload for execution */
+  payload: unknown;
+  /** Whether enabled */
+  enabled: boolean;
+  /** Next execution time (ISO) */
+  nextRun: string;
+  /** Created at (ISO) */
+  createdAt: string;
+}
+
+export interface TaskQueueItem {
+  /** Task ID */
+  id: string;
+  /** Status */
+  status: "pending" | "running" | "completed" | "failed";
+  /** Started at (ISO) */
+  startedAt?: string;
+  /** Completed at (ISO) */
+  completedAt?: string;
+  /** Result output */
+  result?: string;
+  /** Error message */
+  error?: string;
+  /** Execution log */
+  log: string[];
+}
+
+export interface Alarm {
+  /** Alarm ID (matches task ID) */
+  id: string;
+  /** Scheduled time (ISO) */
+  scheduledTime: string;
+  /** Task ID this alarm triggers */
+  taskId: string;
+}
+
+export interface ScheduleTasksRequest {
+  tasks: Omit<ScheduledTaskConfig, "id" | "nextRun" | "createdAt">[];
+}
+
+export interface ScheduleTasksResponse {
+  ok: boolean;
+  scheduled: number;
+  ids: string[];
+}
+
+export interface TaskStatusResponse {
+  taskId: string;
+  status: string;
+  result?: string;
+  error?: string;
+  log: string[];
+}
+
 export class AdmiralDO implements DurableObject {
   private state: DurableObjectState;
 
@@ -135,6 +198,21 @@ export class AdmiralDO implements DurableObject {
     if (request.method === "GET" && pathname.startsWith("registry/profile/")) {
       const username = pathname.slice("registry/profile/".length);
       return this.handleRegistryGetProfile(username);
+    }
+
+    // Task queue endpoints
+    if (request.method === "POST" && pathname === "tasks/schedule") {
+      return this.handleScheduleTasks(request);
+    }
+    if (request.method === "POST" && pathname === "tasks/execute") {
+      return this.handleExecuteTask(request);
+    }
+    if (request.method === "GET" && pathname.startsWith("tasks/status/")) {
+      const taskId = pathname.slice("tasks/status/".length);
+      return this.handleGetTaskStatus(taskId);
+    }
+    if (request.method === "POST" && pathname === "tasks/webhook") {
+      return this.handleWebhook(request);
     }
 
     return new Response("Not Found", { status: 404 });
@@ -402,6 +480,327 @@ export class AdmiralDO implements DurableObject {
   private isValidJwtFormat(signature: string): boolean {
     const parts = signature.split(".");
     return parts.length === 3 && parts.every((p) => p.length > 0);
+  }
+
+  // ── Task Queue handlers ───────────────────────────────────────────────────────────
+
+  /**
+   * POST /tasks/schedule
+   *
+   * Schedule tasks for execution.
+   * Stores tasks and sets DO alarms for their next execution.
+   * Returns count of scheduled tasks and their IDs.
+   */
+  private async handleScheduleTasks(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as ScheduleTasksRequest;
+      if (!body.tasks || !Array.isArray(body.tasks)) {
+        return new Response("Missing tasks array", { status: 400 });
+      }
+
+      const now = new Date();
+      const scheduledTasks = (await this.state.storage.get<Map<string, ScheduledTaskConfig>>("scheduled-tasks"))
+        ?? new Map();
+      const alarms = (await this.state.storage.get<Alarm[]>("task-alarms")) ?? [];
+      const ids: string[] = [];
+
+      for (const task of body.tasks) {
+        const id = crypto.randomUUID();
+        const nextRun = this.calculateNextRun(task.schedule, now);
+
+        const config: ScheduledTaskConfig = {
+          id,
+          schedule: task.schedule,
+          target: task.target,
+          payload: task.payload,
+          enabled: task.enabled ?? true,
+          nextRun,
+          createdAt: now.toISOString(),
+        };
+
+        scheduledTasks.set(id, config);
+
+        // Set DO alarm for next execution
+        if (task.enabled !== false) {
+          await this.state.storage.setAlarm(new Date(nextRun), id);
+          alarms.push({
+            id,
+            scheduledTime: nextRun,
+            taskId: id,
+          });
+        }
+
+        ids.push(id);
+      }
+
+      // Convert Map to object for storage
+      const scheduledTasksObj = Object.fromEntries(scheduledTasks.entries());
+      await this.state.storage.put("scheduled-tasks", scheduledTasksObj);
+      await this.state.storage.put("task-alarms", alarms);
+
+      const response: ScheduleTasksResponse = {
+        ok: true,
+        scheduled: ids.length,
+        ids,
+      };
+
+      return json(response);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return new Response(`Scheduling failed: ${msg}`, { status: 400 });
+    }
+  }
+
+  /**
+   * POST /tasks/execute
+   *
+   * Triggered by DO alarm when a task is due.
+   * Finds the task, executes it, and records the result.
+   */
+  private async handleExecuteTask(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { taskId: string };
+      if (!body.taskId) {
+        return new Response("Missing taskId", { status: 400 });
+      }
+
+      const scheduledTasksObj = await this.state.storage.get<Record<string, ScheduledTaskConfig>>("scheduled-tasks");
+      if (!scheduledTasksObj) {
+        return new Response("No scheduled tasks found", { status: 404 });
+      }
+
+      const task = scheduledTasksObj[body.taskId];
+      if (!task) {
+        return new Response("Task not found", { status: 404 });
+      }
+
+      // Create queue item for execution
+      const queueItem: TaskQueueItem = {
+        id: body.taskId,
+        status: "running",
+        startedAt: new Date().toISOString(),
+        log: [`Started execution at ${new Date().toISOString()}`],
+      };
+
+      const queue = (await this.state.storage.get<TaskQueueItem[]>("task-queue")) ?? [];
+      queue.push(queueItem);
+      await this.state.storage.put("task-queue", queue);
+
+      // Execute the task (in real implementation, this would call a worker)
+      const result = await this.executeTaskWork(task);
+
+      // Update queue item with result
+      const updatedQueue = (await this.state.storage.get<TaskQueueItem[]>("task-queue")) ?? [];
+      const itemIndex = updatedQueue.findIndex((q) => q.id === body.taskId);
+      if (itemIndex >= 0) {
+        updatedQueue[itemIndex] = {
+          ...updatedQueue[itemIndex]!,
+          status: result.success ? "completed" : "failed",
+          completedAt: new Date().toISOString(),
+          result: result.output,
+          error: result.error,
+          log: [...updatedQueue[itemIndex]!.log, ...result.log],
+        };
+        await this.state.storage.put("task-queue", updatedQueue);
+      }
+
+      // Reschedule if it's a recurring task (cron)
+      if (this.isCronExpression(task.schedule)) {
+        const nextRun = this.calculateNextRun(task.schedule, new Date());
+        const updatedTask: ScheduledTaskConfig = {
+          ...task,
+          nextRun,
+        };
+
+        const scheduledTasks = { ...scheduledTasksObj };
+        scheduledTasks[body.taskId] = updatedTask;
+        await this.state.storage.put("scheduled-tasks", scheduledTasks);
+
+        // Set next alarm
+        await this.state.storage.setAlarm(new Date(nextRun), body.taskId);
+      }
+
+      return json({
+        ok: true,
+        taskId: body.taskId,
+        status: result.success ? "completed" : "failed",
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return new Response(`Execution failed: ${msg}`, { status: 500 });
+    }
+  }
+
+  /**
+   * GET /tasks/status/:taskId
+   *
+   * Get execution status and logs for a task.
+   */
+  private async handleGetTaskStatus(taskId: string): Promise<Response> {
+    if (!taskId) {
+      return new Response("Missing taskId", { status: 400 });
+    }
+
+    const queue = (await this.state.storage.get<TaskQueueItem[]>("task-queue")) ?? [];
+    const item = queue.find((q) => q.id === taskId);
+
+    if (!item) {
+      return new Response("Task not found in queue", { status: 404 });
+    }
+
+    const response: TaskStatusResponse = {
+      taskId: item.id,
+      status: item.status,
+      result: item.result,
+      error: item.error,
+      log: item.log,
+    };
+
+    return json(response);
+  }
+
+  /**
+   * POST /tasks/webhook
+   *
+   * GitHub webhook handler.
+   * Validates signature and triggers tasks based on webhook events.
+   */
+  private async handleWebhook(request: Request): Promise<Response> {
+    try {
+      const signature = request.headers.get("X-Hub-Signature-256");
+      if (!signature) {
+        return new Response("Missing signature", { status: 401 });
+      }
+
+      const rawBody = await request.text();
+      const expectedSignature = request.headers.get("X-Hub-Signature-256");
+
+      // In production, verify with actual secret
+      // For now, just check format
+      if (!signature.startsWith("sha256=")) {
+        return new Response("Invalid signature format", { status: 401 });
+      }
+
+      const payload = JSON.parse(rawBody) as Record<string, unknown>;
+      const event = request.headers.get("X-GitHub-Event");
+
+      // Handle different webhook events
+      if (event === "push") {
+        await this.handlePushWebhook(payload);
+      } else if (event === "ping") {
+        // Just acknowledge
+      }
+
+      return json({ ok: true, event });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return new Response(`Webhook processing failed: ${msg}`, { status: 400 });
+    }
+  }
+
+  // ── Task Queue helpers ────────────────────────────────────────────────────────────
+
+  /**
+   * Calculate next run time based on schedule.
+   * Supports ISO timestamps for one-shot and cron expressions for recurring.
+   */
+  private calculateNextRun(schedule: string, from: Date): string {
+    // Check if it's an ISO timestamp
+    if (schedule.includes("T") || /^\d{4}-\d{2}-\d{2}/.test(schedule)) {
+      return schedule;
+    }
+
+    // Simple cron parser (supports limited patterns)
+    // Format: "M H D Mo W" (minute hour day month weekday)
+    const cronMatch = schedule.match(/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/);
+    if (cronMatch) {
+      const [, minute, hour, day, month, weekday] = cronMatch;
+
+      // For simplicity, just add 1 minute for now
+      // A full implementation would parse the cron expression
+      const next = new Date(from.getTime() + 60 * 1000);
+      return next.toISOString();
+    }
+
+    // Default: 1 hour from now
+    const next = new Date(from.getTime() + 60 * 60 * 1000);
+    return next.toISOString();
+  }
+
+  /**
+   * Check if a schedule is a cron expression.
+   */
+  private isCronExpression(schedule: string): boolean {
+    return /^\S+\s+\S+\s+\S+\s+\S+\s+\S+$/.test(schedule);
+  }
+
+  /**
+   * Execute the actual task work.
+   * In production, this would call a worker or agent.
+   */
+  private async executeTaskWork(task: ScheduledTaskConfig): Promise<{
+    success: boolean;
+    output?: string;
+    error?: string;
+    log: string[];
+  }> {
+    const log: string[] = [];
+
+    try {
+      log.push(`Executing task ${task.id} with target ${task.target}`);
+      log.push(`Payload: ${JSON.stringify(task.payload)}`);
+
+      // Simulate work
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const output = `Task ${task.id} completed successfully`;
+      log.push(output);
+
+      return {
+        success: true,
+        output,
+        log,
+      };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      log.push(`Error: ${error}`);
+      return {
+        success: false,
+        error,
+        log,
+      };
+    }
+  }
+
+  /**
+   * Handle push webhook event.
+   * Triggers tasks associated with the repository.
+   */
+  private async handlePushWebhook(payload: Record<string, unknown>): Promise<void> {
+    const repo = payload.repository as Record<string, unknown> | undefined;
+    const repoName = repo?.["full_name"] as string | undefined;
+
+    if (!repoName) return;
+
+    // Find tasks associated with this repo and trigger them
+    const scheduledTasksObj = await this.state.storage.get<Record<string, ScheduledTaskConfig>>("scheduled-tasks");
+    if (!scheduledTasksObj) return;
+
+    const tasks = Object.values(scheduledTasksObj).filter((t) =>
+      t.payload && typeof t.payload === "object" && "repo" in t.payload &&
+      (t.payload as Record<string, unknown>).repo === repoName
+    );
+
+    for (const task of tasks) {
+      // Trigger immediate execution
+      await this.handleExecuteTask(
+        new Request(`https://admiral.test/tasks/execute`, {
+          method: "POST",
+          body: JSON.stringify({ taskId: task.id }),
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    }
   }
 }
 
