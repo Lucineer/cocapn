@@ -43,6 +43,7 @@
     "@types/keytar": "^4.4.2",
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.10",
+    "playwright": "^1.48.0",
     "tsx": "^4.16.0",
     "typescript": "^5.4.0",
     "vite-tsconfig-paths": "^6.1.1",

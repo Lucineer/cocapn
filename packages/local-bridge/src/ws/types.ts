@@ -82,7 +82,8 @@ export type TypedMessageType =
   | "CHANGE_SKIN"
   | "RUN_TESTS"
   | "GENERATE_TESTS"
-  | "TEST_STATUS";
+  | "TEST_STATUS"
+  | "BROWSER";
 
 export interface TypedMessage {
   type: TypedMessageType;

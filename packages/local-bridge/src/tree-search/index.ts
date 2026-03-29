@@ -197,3 +197,4 @@ export * from './types.js';
 export { ExperimentManager } from './manager.js';
 export { ApproachGenerator } from './approach-generator.js';
 export { TreeSearchExecutor } from './executor.js';
+export * from './ab-test.js';

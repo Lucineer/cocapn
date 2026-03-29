@@ -54,6 +54,7 @@ import { handleSkillList, handleSkillLoad, handleSkillUnload, handleSkillMatch, 
 import { handleTreeSearch, handleTreeSearchStatus } from "../handlers/tree-search.js";
 import { handleGraphQuery, handleGraphStats } from "../handlers/graph.js";
 import { handleTokenStats, handleTokenEfficiency, handleTokenWaste } from "../handlers/metrics.js";
+import { handleBrowser } from "../handlers/browser.js";
 
 // Re-export types for backward compatibility
 export type { BridgeServerOptions, BridgeServerEventMap, TypedMessage, JsonRpcRequest, SessionState };
@@ -122,6 +123,7 @@ export class BridgeServer extends EventEmitter<BridgeServerEventMap> {
       ["RUN_TESTS", handleRunTests],
       ["GENERATE_TESTS", handleGenerateTests],
       ["TEST_STATUS", handleTestStatus],
+      ["BROWSER", handleBrowser],
     ]);
 
     // ChatHandler needs broadcast and moduleManager
