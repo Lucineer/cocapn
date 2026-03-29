@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plugin Marketplace — Cocapn</title>
+  <meta name="description" content="Browse and install cocapn plugins from the npm registry. Extend your AI agent with skills, tools, and integrations.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <div class="nav-inner">
+      <a href="https://cocapn.ai" class="logo">cocapn<span class="dot">.</span>ai</a>
+      <div class="nav-links">
+        <a href="https://docs.cocapn.ai">Docs</a>
+        <a href="https://github.com/CedarBeach2019/cocapn">GitHub</a>
+        <a href="#submit">Submit Plugin</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="page-header">
+    <h1>Plugin <span class="highlight">Marketplace</span></h1>
+    <p>Browse and install community plugins for cocapn agents</p>
+  </div>
+
+  <div class="search-wrap">
+    <span class="search-icon">&#128269;</span>
+    <input
+      type="text"
+      class="search-box"
+      id="searchInput"
+      placeholder="Search plugins..."
+      autocomplete="off"
+      spellcheck="false"
+    >
+  </div>
+
+  <div class="status-bar" id="statusBar" style="display:none">
+    <span class="count" id="resultCount"></span>
+    <button class="sort-btn" id="sortBtn">Sort: Downloads &#8595;</button>
+  </div>
+
+  <div class="plugin-grid" id="pluginGrid">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Loading plugins from npm&hellip;</p>
+    </div>
+  </div>
+
+  <div class="submit-section" id="submit">
+    <div class="submit-card">
+      <h2>Submit a <span class="highlight">Plugin</span></h2>
+      <p>Publish your plugin to npm and it appears here automatically.</p>
+      <ol class="submit-steps">
+        <li>Create a <code>cocapn-plugin.json</code> manifest in your package root with your skills and permissions.</li>
+        <li>Add <code>"cocapn-plugin"</code> to the <code>keywords</code> array in your <code>package.json</code>.</li>
+        <li>Publish to npm with <code>npm publish</code>.</li>
+        <li>It appears in this marketplace within a few minutes.</li>
+      </ol>
+    </div>
+  </div>
+
+  <footer>
+    <p>&copy; 2026 Superinstance &middot; <a href="https://github.com/CedarBeach2019/cocapn">cocapn on GitHub</a></p>
+  </footer>
+
+  <script>
+    const NPM_SEARCH = 'https://registry.npmjs.org/-/v1/search';
+    const KEYWORD = 'cocapn-plugin';
+    const PAGE_SIZE = 50;
+
+    let allPlugins = [];
+    let sortDownloads = true;
+
+    const grid = document.getElementById('pluginGrid');
+    const searchInput = document.getElementById('searchInput');
+    const statusBar = document.getElementById('statusBar');
+    const resultCount = document.getElementById('resultCount');
+    const sortBtn = document.getElementById('sortBtn');
+
+    async function searchPlugins(query) {
+      const q = query
+        ? `${encodeURIComponent(query)}+keywords:${KEYWORD}`
+        : `keywords:${KEYWORD}`;
+      const res = await fetch(`${NPM_SEARCH}?text=${q}&size=${PAGE_SIZE}`);
+      const data = await res.json();
+      return data.objects || [];
+    }
+
+    function formatDownloads(n) {
+      if (n == null) return '';
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M/wk';
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K/wk';
+      return n + '/wk';
+    }
+
+    function renderCard(pkg) {
+      const name = pkg.package.name;
+      const version = pkg.package.version;
+      const desc = pkg.package.description || 'No description available.';
+      const author = (pkg.package.author && pkg.package.author.name) || pkg.package.maintainers?.[0]?.name || '';
+      const downloads = pkg.package.downloads || null;
+
+      return `
+        <div class="plugin-card">
+          <h3><a href="https://www.npmjs.com/package/${name}" target="_blank" rel="noopener">${name}</a></h3>
+          <p class="desc">${escHtml(desc)}</p>
+          <div class="meta">
+            <span class="version">v${escHtml(version)}</span>
+            ${author ? `<span class="author">by ${escHtml(author)}</span>` : ''}
+            ${downloads != null ? `<span class="downloads">${formatDownloads(downloads)}</span>` : ''}
+          </div>
+          <div class="install-cmd" onclick="copyCmd(this, '${escAttr(name)}')" title="Click to copy">
+            <code>npm install ${escHtml(name)}</code>
+            <span class="copy-hint">click to copy</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderEmpty(query) {
+      return `
+        <div class="empty-state">
+          <div class="icon">&#128269;</div>
+          <h3>No plugins found${query ? ` for "${escHtml(query)}"` : ''}</h3>
+          <p>Try a different search term, or <a href="#submit">submit your own plugin</a>.</p>
+        </div>
+      `;
+    }
+
+    function escHtml(s) {
+      const el = document.createElement('span');
+      el.textContent = s;
+      return el.innerHTML;
+    }
+
+    function escAttr(s) {
+      return s.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    function copyCmd(el, name) {
+      const cmd = `npm install ${name}`;
+      navigator.clipboard.writeText(cmd).then(() => {
+        const hint = el.querySelector('.copy-hint');
+        hint.textContent = 'copied!';
+        hint.style.opacity = '1';
+        setTimeout(() => { hint.textContent = 'click to copy'; hint.style.opacity = ''; }, 1500);
+      });
+    }
+
+    function render(plugins) {
+      if (plugins.length === 0) {
+        grid.innerHTML = renderEmpty(searchInput.value.trim());
+        statusBar.style.display = 'none';
+        return;
+      }
+
+      grid.innerHTML = plugins.map(renderCard).join('');
+      statusBar.style.display = 'flex';
+      const total = allPlugins.length;
+      const shown = plugins.length;
+      resultCount.textContent = `Showing ${shown} plugin${shown !== 1 ? 's' : ''}${searchInput.value.trim() ? ` for "${searchInput.value.trim()}"` : ''}`;
+    }
+
+    function sortPlugins(plugins) {
+      const sorted = [...plugins];
+      if (sortDownloads) {
+        sorted.sort((a, b) => (b.package.downloads || 0) - (a.package.downloads || 0));
+      } else {
+        sorted.sort((a, b) => a.package.name.localeCompare(b.package.name));
+      }
+      return sorted;
+    }
+
+    function filterPlugins() {
+      const q = searchInput.value.trim().toLowerCase();
+      if (!q) {
+        render(sortPlugins(allPlugins));
+        return;
+      }
+      const filtered = allPlugins.filter(p => {
+        const name = (p.package.name || '').toLowerCase();
+        const desc = (p.package.description || '').toLowerCase();
+        const keywords = (p.package.keywords || []).join(' ').toLowerCase();
+        return name.includes(q) || desc.includes(q) || keywords.includes(q);
+      });
+      render(sortPlugins(filtered));
+    }
+
+    let debounceTimer;
+    searchInput.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(filterPlugins, 200);
+    });
+
+    sortBtn.addEventListener('click', () => {
+      sortDownloads = !sortDownloads;
+      sortBtn.innerHTML = sortDownloads
+        ? 'Sort: Downloads &#8595;'
+        : 'Sort: A &rarr; Z';
+      filterPlugins();
+    });
+
+    async function init() {
+      try {
+        allPlugins = await searchPlugins('');
+        if (allPlugins.length === 0) {
+          grid.innerHTML = renderEmpty('');
+          statusBar.style.display = 'none';
+          return;
+        }
+        render(sortPlugins(allPlugins));
+      } catch (err) {
+        grid.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">&#9888;&#65039;</div>
+            <h3>Failed to load plugins</h3>
+            <p>Could not reach the npm registry. Check your connection and try again.</p>
+          </div>
+        `;
+        statusBar.style.display = 'none';
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
