@@ -13,8 +13,9 @@ tag = "v1"
 new_classes = ["AdmiralDO"]
 
 # Secrets (set via `wrangler secret put`):
-#   GITHUB_PAT    — GitHub PAT with repo:read scope
-#   CF_API_TOKEN  — Cloudflare API token (for self-referential calls)
+#   GITHUB_PAT       — GitHub PAT with repo:read scope
+#   FLEET_JWT_SECRET — Secret key for fleet JWT verification (HMAC-SHA256)
+#   CF_API_TOKEN     — Cloudflare API token (for self-referential calls)
 #
 # Environment variables (non-secret):
 [vars]

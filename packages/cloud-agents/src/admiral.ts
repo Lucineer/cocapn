@@ -1,6 +1,11 @@
 /**
  * AdmiralDO — Durable Object for cross-device session persistence and discovery registry.
  *
+ * SQLite-backed storage:
+ *   Uses ctx.storage.sql for structured data storage with indexes.
+ *   Falls back to KV storage (ctx.storage.get/put) if SQL is unavailable.
+ *   One-time migration from KV to SQLite on first access.
+ *
  * Session persistence:
  *   Stores the current "state of the bridge" so cloud agents started on one
  *   device can pick up where they left off on another.
@@ -159,9 +164,222 @@ export interface TaskStatusResponse {
 
 export class AdmiralDO implements DurableObject {
   private state: DurableObjectState;
+  private sqlEnabled: boolean | null = null;
 
   constructor(state: DurableObjectState) {
     this.state = state;
+  }
+
+  /**
+   * Check if SQL storage is available.
+   * Cached after first check.
+   */
+  private async isSqlEnabled(): Promise<boolean> {
+    if (this.sqlEnabled !== null) {
+      return this.sqlEnabled;
+    }
+
+    try {
+      // Try a simple SQL query to check if SQL is available
+      await this.state.storage.sql`SELECT 1`;
+      this.sqlEnabled = true;
+      return true;
+    } catch {
+      this.sqlEnabled = false;
+      return false;
+    }
+  }
+
+  /**
+   * Initialize SQLite schema if SQL is enabled.
+   * Called on first SQL access.
+   */
+  private async initSqlSchema(): Promise<void> {
+    if (!(await this.isSqlEnabled())) {
+      return;
+    }
+
+    try {
+      // Create profiles table
+      await this.state.storage.sql`
+        CREATE TABLE IF NOT EXISTS profiles (
+          username TEXT PRIMARY KEY,
+          displayName TEXT,
+          currentFocus TEXT,
+          bio TEXT,
+          domain TEXT,
+          website TEXT,
+          profileJson TEXT,
+          signature TEXT,
+          fleetPublicKey TEXT,
+          lastSeen TEXT,
+          createdAt TEXT,
+          expiresAt TEXT
+        )
+      `;
+
+      // Create indexes for profiles
+      await this.state.storage.sql`
+        CREATE INDEX IF NOT EXISTS idx_profiles_name
+        ON profiles(displayName)
+      `;
+
+      await this.state.storage.sql`
+        CREATE INDEX IF NOT EXISTS idx_profiles_focus
+        ON profiles(currentFocus)
+      `;
+
+      await this.state.storage.sql`
+        CREATE INDEX IF NOT EXISTS idx_profiles_domain
+        ON profiles(domain)
+      `;
+
+      // Create scheduled_tasks table
+      await this.state.storage.sql`
+        CREATE TABLE IF NOT EXISTS scheduled_tasks (
+          taskId TEXT PRIMARY KEY,
+          username TEXT,
+          cron TEXT,
+          timezone TEXT,
+          agent TEXT,
+          instructions TEXT,
+          payload TEXT,
+          enabled INTEGER,
+          lastRun TEXT,
+          nextRun TEXT,
+          createdAt TEXT
+        )
+      `;
+
+      await this.state.storage.sql`
+        CREATE INDEX IF NOT EXISTS idx_tasks_next
+        ON scheduled_tasks(nextRun)
+      `;
+
+      // Create task_queue table
+      await this.state.storage.sql`
+        CREATE TABLE IF NOT EXISTS task_queue (
+          queueId TEXT PRIMARY KEY,
+          taskId TEXT,
+          status TEXT,
+          result TEXT,
+          error TEXT,
+          log TEXT,
+          createdAt TEXT,
+          startedAt TEXT,
+          completedAt TEXT
+        )
+      `;
+
+      await this.state.storage.sql`
+        CREATE INDEX IF NOT EXISTS idx_queue_status
+        ON task_queue(status)
+      `;
+    } catch (error) {
+      // If schema creation fails, disable SQL
+      console.error("Failed to initialize SQL schema:", error);
+      this.sqlEnabled = false;
+    }
+  }
+
+  /**
+   * One-time migration from KV to SQLite.
+   * Called on first SQL access if KV has data.
+   */
+  private async migrateKvToSql(): Promise<void> {
+    if (!(await this.isSqlEnabled())) {
+      return;
+    }
+
+    try {
+      // Migrate profiles
+      const registry = await this.state.storage.get<RegistryProfile[]>("registry");
+      if (registry && registry.length > 0) {
+        // Check if profiles table is empty
+        const existingProfiles = await this.state.storage.sql<
+          Array<{ username: string }>
+        >`SELECT username FROM profiles LIMIT 1`;
+
+        if (existingProfiles.length === 0) {
+          // Migrate profiles to SQL
+          for (const profile of registry) {
+            await this.state.storage.sql`
+              INSERT INTO profiles (
+                username, displayName, currentFocus, bio, website,
+                signature, createdAt, expiresAt
+              ) VALUES (
+                ${profile.username},
+                ${profile.displayName ?? null},
+                ${profile.currentFocus ?? null},
+                ${profile.bio ?? null},
+                ${profile.website ?? null},
+                ${profile.signature},
+                ${profile.registeredAt},
+                ${profile.expiresAt}
+              )
+            `;
+          }
+        }
+      }
+
+      // Migrate scheduled tasks
+      const scheduledTasksObj = await this.state.storage.get<Record<string, ScheduledTaskConfig>>("scheduled-tasks");
+      if (scheduledTasksObj) {
+        // Check if scheduled_tasks table is empty
+        const existingTasks = await this.state.storage.sql<Array<{ taskId: string }>>`SELECT taskId FROM scheduled_tasks LIMIT 1`;
+
+        if (existingTasks.length === 0) {
+          // Migrate tasks to SQL
+          for (const [id, task] of Object.entries(scheduledTasksObj)) {
+            await this.state.storage.sql`
+              INSERT INTO scheduled_tasks (
+                taskId, cron, agent, payload, enabled, nextRun, createdAt
+              ) VALUES (
+                ${id},
+                ${task.schedule},
+                ${task.target},
+                ${JSON.stringify(task.payload)},
+                ${task.enabled ? 1 : 0},
+                ${task.nextRun},
+                ${task.createdAt}
+              )
+            `;
+          }
+        }
+      }
+
+      // Migrate task queue
+      const taskQueue = await this.state.storage.get<TaskQueueItem[]>("task-queue");
+      if (taskQueue && taskQueue.length > 0) {
+        // Check if task_queue table is empty
+        const existingQueue = await this.state.storage.sql<Array<{ queueId: string }>>`SELECT queueId FROM task_queue LIMIT 1`;
+
+        if (existingQueue.length === 0) {
+          // Migrate queue items to SQL
+          for (const item of taskQueue) {
+            await this.state.storage.sql`
+              INSERT INTO task_queue (
+                queueId, taskId, status, result, error, log,
+                createdAt, startedAt, completedAt
+              ) VALUES (
+                ${item.id},
+                ${item.id},
+                ${item.status},
+                ${item.result ?? null},
+                ${item.error ?? null},
+                ${JSON.stringify(item.log)},
+                ${item.startedAt ?? item.createdAt},
+                ${item.startedAt ?? null},
+                ${item.completedAt ?? null}
+              )
+            `;
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed to migrate KV to SQL:", error);
+      // Continue with KV fallback
+    }
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -368,7 +586,51 @@ export class AdmiralDO implements DurableObject {
         expiresAt: expiresAt.toISOString(),
       };
 
-      // Store in registry
+      // Try SQL first, fall back to KV
+      if (await this.isSqlEnabled()) {
+        await this.initSqlSchema();
+        await this.migrateKvToSql();
+
+        // Use UPSERT (SQLite 3.24+)
+        await this.state.storage.sql`
+          INSERT INTO profiles (
+            username, displayName, currentFocus, bio, website,
+            signature, createdAt, expiresAt
+          ) VALUES (
+            ${registryProfile.username},
+            ${registryProfile.displayName ?? null},
+            ${registryProfile.currentFocus ?? null},
+            ${registryProfile.bio ?? null},
+            ${registryProfile.website ?? null},
+            ${registryProfile.signature},
+            ${registryProfile.registeredAt},
+            ${registryProfile.expiresAt}
+          )
+          ON CONFLICT(username) DO UPDATE SET
+            displayName = excluded.displayName,
+            currentFocus = excluded.currentFocus,
+            bio = excluded.bio,
+            website = excluded.website,
+            signature = excluded.signature,
+            expiresAt = excluded.expiresAt
+        `;
+
+        // Cleanup expired profiles
+        await this.state.storage.sql`
+          DELETE FROM profiles WHERE expiresAt < datetime('now')
+        `;
+
+        // Get peer count
+        const countResult = await this.state.storage.sql<Array<{ count: number }>>`
+          SELECT COUNT(*) as count FROM profiles
+        `;
+        const peerCount = countResult[0]?.count ?? 0;
+
+        const response: RegisterResponse = { ok: true, peerCount };
+        return json(response);
+      }
+
+      // KV fallback
       const registry = (await this.state.storage.get<RegistryProfile[]>("registry")) ?? [];
       const existingIndex = registry.findIndex((p) => p.username === profile.username);
 
@@ -403,6 +665,58 @@ export class AdmiralDO implements DurableObject {
       return json({ results: [], total: 0 });
     }
 
+    // Try SQL first, fall back to KV
+    if (await this.isSqlEnabled()) {
+      await this.initSqlSchema();
+      await this.migrateKvToSql();
+
+      const searchPattern = `%${query}%`;
+
+      const results = await this.state.storage.sql<
+        Array<{
+          username: string;
+          displayName: string | null;
+          currentFocus: string | null;
+          bio: string | null;
+          website: string | null;
+          signature: string;
+          createdAt: string;
+          expiresAt: string;
+        }>
+      >`
+        SELECT
+          username, displayName, currentFocus, bio, website,
+          signature, createdAt as registeredAt, expiresAt
+        FROM profiles
+        WHERE expiresAt > datetime('now')
+          AND (
+            LOWER(username) LIKE ${searchPattern}
+            OR LOWER(displayName) LIKE ${searchPattern}
+            OR LOWER(currentFocus) LIKE ${searchPattern}
+          )
+        ORDER BY createdAt DESC
+        LIMIT ${MAX_DISCOVER_RESULTS}
+      `;
+
+      const response: DiscoverResponse = {
+        results: results.map((row) => ({
+          username: row.username,
+          displayName: row.displayName ?? undefined,
+          currentFocus: row.currentFocus ?? undefined,
+          bio: row.bio ?? undefined,
+          website: row.website ?? undefined,
+          domains: [],
+          signature: row.signature,
+          registeredAt: row.registeredAt,
+          expiresAt: row.expiresAt,
+        })),
+        total: results.length,
+      };
+
+      return json(response);
+    }
+
+    // KV fallback
     const registry = await this.getValidRegistry();
 
     // Filter by search query
@@ -434,6 +748,53 @@ export class AdmiralDO implements DurableObject {
       return new Response("Missing username", { status: 400 });
     }
 
+    // Try SQL first, fall back to KV
+    if (await this.isSqlEnabled()) {
+      await this.initSqlSchema();
+      await this.migrateKvToSql();
+
+      const results = await this.state.storage.sql<
+        Array<{
+          username: string;
+          displayName: string | null;
+          currentFocus: string | null;
+          bio: string | null;
+          website: string | null;
+          signature: string;
+          createdAt: string;
+          expiresAt: string;
+        }>
+      >`
+        SELECT
+          username, displayName, currentFocus, bio, website,
+          signature, createdAt as registeredAt, expiresAt
+        FROM profiles
+        WHERE username = ${username}
+          AND expiresAt > datetime('now')
+        LIMIT 1
+      `;
+
+      if (results.length === 0) {
+        return new Response("Profile not found", { status: 404 });
+      }
+
+      const row = results[0]!;
+      const profile: RegistryProfile = {
+        username: row.username,
+        displayName: row.displayName ?? undefined,
+        currentFocus: row.currentFocus ?? undefined,
+        bio: row.bio ?? undefined,
+        website: row.website ?? undefined,
+        domains: [],
+        signature: row.signature,
+        registeredAt: row.registeredAt,
+        expiresAt: row.expiresAt,
+      };
+
+      return json(profile);
+    }
+
+    // KV fallback
     const registry = await this.getValidRegistry();
     const profile = registry.find((p) => p.username === username);
 
@@ -499,10 +860,52 @@ export class AdmiralDO implements DurableObject {
       }
 
       const now = new Date();
-      const scheduledTasks = (await this.state.storage.get<Map<string, ScheduledTaskConfig>>("scheduled-tasks"))
-        ?? new Map();
-      const alarms = (await this.state.storage.get<Alarm[]>("task-alarms")) ?? [];
       const ids: string[] = [];
+
+      // Try SQL first, fall back to KV
+      if (await this.isSqlEnabled()) {
+        await this.initSqlSchema();
+        await this.migrateKvToSql();
+
+        for (const task of body.tasks) {
+          const id = crypto.randomUUID();
+          const nextRun = this.calculateNextRun(task.schedule, now);
+
+          await this.state.storage.sql`
+            INSERT INTO scheduled_tasks (
+              taskId, cron, agent, payload, enabled, nextRun, createdAt
+            ) VALUES (
+              ${id},
+              ${task.schedule},
+              ${task.target},
+              ${JSON.stringify(task.payload)},
+              ${task.enabled !== false ? 1 : 0},
+              ${nextRun},
+              ${now.toISOString()}
+            )
+          `;
+
+          // Set DO alarm for next execution
+          if (task.enabled !== false) {
+            await this.state.storage.setAlarm(new Date(nextRun), id);
+          }
+
+          ids.push(id);
+        }
+
+        const response: ScheduleTasksResponse = {
+          ok: true,
+          scheduled: ids.length,
+          ids,
+        };
+
+        return json(response);
+      }
+
+      // KV fallback
+      const scheduledTasks = (await this.state.storage.get<Record<string, ScheduledTaskConfig>>("scheduled-tasks"))
+        ?? {};
+      const alarms = (await this.state.storage.get<Alarm[]>("task-alarms")) ?? [];
 
       for (const task of body.tasks) {
         const id = crypto.randomUUID();
@@ -518,7 +921,7 @@ export class AdmiralDO implements DurableObject {
           createdAt: now.toISOString(),
         };
 
-        scheduledTasks.set(id, config);
+        scheduledTasks[id] = config;
 
         // Set DO alarm for next execution
         if (task.enabled !== false) {
@@ -533,9 +936,7 @@ export class AdmiralDO implements DurableObject {
         ids.push(id);
       }
 
-      // Convert Map to object for storage
-      const scheduledTasksObj = Object.fromEntries(scheduledTasks.entries());
-      await this.state.storage.put("scheduled-tasks", scheduledTasksObj);
+      await this.state.storage.put("scheduled-tasks", scheduledTasks);
       await this.state.storage.put("task-alarms", alarms);
 
       const response: ScheduleTasksResponse = {
@@ -564,6 +965,97 @@ export class AdmiralDO implements DurableObject {
         return new Response("Missing taskId", { status: 400 });
       }
 
+      // Try SQL first, fall back to KV
+      if (await this.isSqlEnabled()) {
+        await this.initSqlSchema();
+        await this.migrateKvToSql();
+
+        // Get the task
+        const tasks = await this.state.storage.sql<
+          Array<{
+            taskId: string;
+            cron: string;
+            agent: string;
+            payload: string;
+            enabled: number;
+            nextRun: string;
+            createdAt: string;
+          }>
+        >`
+          SELECT taskId, cron, agent, payload, enabled, nextRun, createdAt
+          FROM scheduled_tasks
+          WHERE taskId = ${body.taskId}
+          LIMIT 1
+        `;
+
+        if (tasks.length === 0) {
+          return new Response("Task not found", { status: 404 });
+        }
+
+        const row = tasks[0]!;
+        const task: ScheduledTaskConfig = {
+          id: row.taskId,
+          schedule: row.cron,
+          target: row.agent,
+          payload: JSON.parse(row.payload),
+          enabled: row.enabled === 1,
+          nextRun: row.nextRun,
+          createdAt: row.createdAt,
+        };
+
+        // Create queue item for execution
+        const now = new Date().toISOString();
+        await this.state.storage.sql`
+          INSERT INTO task_queue (
+            queueId, taskId, status, log, createdAt, startedAt
+          ) VALUES (
+            ${body.taskId},
+            ${body.taskId},
+            ${"running"},
+            ${JSON.stringify([`Started execution at ${now}`])},
+            ${now},
+            ${now}
+          )
+        `;
+
+        // Execute the task
+        const result = await this.executeTaskWork(task);
+
+        // Update queue item with result
+        const completedAt = new Date().toISOString();
+        const log = JSON.stringify([...result.log]);
+        await this.state.storage.sql`
+          UPDATE task_queue
+          SET status = ${result.success ? "completed" : "failed"},
+              result = ${result.output ?? null},
+              error = ${result.error ?? null},
+              log = ${log},
+              completedAt = ${completedAt}
+          WHERE queueId = ${body.taskId}
+        `;
+
+        // Reschedule if it's a recurring task (cron)
+        if (this.isCronExpression(task.schedule)) {
+          const nextRun = this.calculateNextRun(task.schedule, new Date());
+
+          await this.state.storage.sql`
+            UPDATE scheduled_tasks
+            SET nextRun = ${nextRun}
+            WHERE taskId = ${body.taskId}
+          `;
+
+          // Set next alarm
+          await this.state.storage.setAlarm(new Date(nextRun), body.taskId);
+        }
+
+        return json({
+          ok: true,
+          taskId: body.taskId,
+          status: result.success ? "completed" : "failed",
+        });
+      }
+
+      // KV fallback
       const scheduledTasksObj = await this.state.storage.get<Record<string, ScheduledTaskConfig>>("scheduled-tasks");
       if (!scheduledTasksObj) {
         return new Response("No scheduled tasks found", { status: 404 });
@@ -641,6 +1133,46 @@ export class AdmiralDO implements DurableObject {
       return new Response("Missing taskId", { status: 400 });
     }
 
+    // Try SQL first, fall back to KV
+    if (await this.isSqlEnabled()) {
+      await this.initSqlSchema();
+      await this.migrateKvToSql();
+
+      const results = await this.state.storage.sql<
+        Array<{
+          queueId: string;
+          taskId: string;
+          status: string;
+          result: string | null;
+          error: string | null;
+          log: string;
+        }>
+      >`
+        SELECT queueId, taskId, status, result, error, log
+        FROM task_queue
+        WHERE taskId = ${taskId}
+        LIMIT 1
+      `;
+
+      if (results.length === 0) {
+        return new Response("Task not found in queue", { status: 404 });
+      }
+
+      const row = results[0]!;
+      const log = JSON.parse(row.log) as string[];
+
+      const response: TaskStatusResponse = {
+        taskId: row.taskId,
+        status: row.status,
+        result: row.result ?? undefined,
+        error: row.error ?? undefined,
+        log,
+      };
+
+      return json(response);
+    }
+
+    // KV fallback
     const queue = (await this.state.storage.get<TaskQueueItem[]>("task-queue")) ?? [];
     const item = queue.find((q) => q.id === taskId);
 

@@ -67,6 +67,8 @@ export interface AgentDefinition {
   env: Record<string, string>;
   capabilities: string[];
   cost: "low" | "medium" | "high";
+  /** If true, agent is spawned on first message, not on bridge start */
+  lazy?: boolean;
 }
 
 export interface SpawnOptions {
@@ -249,5 +251,39 @@ export class AgentSpawner extends EventEmitter<SpawnerEventMap> {
 
   getAll(): SpawnedAgent[] {
     return [...this.agents.values()];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lazy spawning
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Check if an agent is currently spawned and ready.
+   */
+  isReady(id: string): boolean {
+    return this.agents.has(id);
+  }
+
+  /**
+   * Ensure an agent is spawned, spawning it lazily if needed.
+   * This is useful for agents with lazy=true that should only spawn on first use.
+   *
+   * Returns the spawned agent, or undefined if spawning failed.
+   */
+  async ensureSpawned(
+    definition: AgentDefinition,
+    options: SpawnOptions = {}
+  ): Promise<SpawnedAgent | undefined> {
+    // If already spawned, return it
+    const existing = this.agents.get(definition.id);
+    if (existing) return existing;
+
+    // Otherwise spawn it now
+    try {
+      return await this.spawn(definition, options);
+    } catch (err) {
+      this.emit("error", definition.id, err instanceof Error ? err : new Error(String(err)));
+      return undefined;
+    }
   }
 }

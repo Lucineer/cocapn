@@ -39,6 +39,11 @@ class MockStorage {
     this.alarms.set(id, time);
   }
 
+  // SQL interface - throws to trigger KV fallback
+  async sql<T>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T> {
+    throw new Error("SQL not available in KV mock");
+  }
+
   // Helper for tests
   clear(): void {
     this.store.clear();

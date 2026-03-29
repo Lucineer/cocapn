@@ -22,6 +22,7 @@ import {
 import { join, extname, basename } from "path";
 import type { GitSync } from "../git/sync.js";
 import type { BridgeConfig } from "../config/types.js";
+import { InvertedIndex, tokenize } from "../utils/inverted-index.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,11 +49,14 @@ export class Brain {
   private repoRoot: string;
   private config: BridgeConfig;
   private sync: GitSync;
+  private wikiIndex: InvertedIndex;
+  private wikiIndexInitialized = false;
 
   constructor(repoRoot: string, config: BridgeConfig, sync: GitSync) {
     this.repoRoot = repoRoot;
     this.config = config;
     this.sync = sync;
+    this.wikiIndex = new InvertedIndex();
   }
 
   // ---------------------------------------------------------------------------
@@ -114,16 +118,24 @@ export class Brain {
 
   /**
    * Search all .md files under the wiki directory for the given query string.
-   * Case-insensitive substring match. Returns pages in order of first match.
+   * Uses inverted index for O(1) term lookups. Returns pages sorted by relevance.
+   *
+   * The index is built on first search and rebuilt when wiki pages change.
    */
   searchWiki(query: string): WikiPage[] {
     const wikiDir = join(this.repoRoot, "cocapn", "wiki");
     if (!existsSync(wikiDir)) return [];
 
-    const lower = query.toLowerCase();
-    const results: WikiPage[] = [];
+    // Build index on first use or if wiki was modified
+    if (!this.wikiIndexInitialized) {
+      this.rebuildWikiIndex();
+    }
 
-    for (const file of this.walkMarkdown(wikiDir, "")) {
+    const results: WikiPage[] = [];
+    const searchResults = this.wikiIndex.search(query);
+    const lower = query.toLowerCase();
+
+    for (const { id: file } of searchResults) {
       const fullPath = join(wikiDir, file);
       let content: string;
       try {
@@ -132,14 +144,36 @@ export class Brain {
         continue;
       }
 
-      if (!content.toLowerCase().includes(lower)) continue;
-
       const title = extractTitle(content) ?? basename(file, extname(file));
       const excerpt = extractExcerpt(content, lower);
       results.push({ file, title, excerpt });
     }
 
     return results;
+  }
+
+  /**
+   * Rebuild the wiki search index.
+   * Call this after adding, updating, or removing wiki pages.
+   */
+  private rebuildWikiIndex(): void {
+    this.wikiIndex.clear();
+    const wikiDir = join(this.repoRoot, "cocapn", "wiki");
+    if (!existsSync(wikiDir)) {
+      this.wikiIndexInitialized = true;
+      return;
+    }
+
+    for (const file of this.walkMarkdown(wikiDir, "")) {
+      const fullPath = join(wikiDir, file);
+      try {
+        const content = readFileSync(fullPath, "utf8");
+        this.wikiIndex.add(file, content);
+      } catch {
+        // Skip unreadable files
+      }
+    }
+    this.wikiIndexInitialized = true;
   }
 
   /**
@@ -154,6 +188,7 @@ export class Brain {
     const destPath = join(wikiDir, name);
     const content = readFileSync(sourcePath, "utf8");
     writeFileSync(destPath, content, "utf8");
+    this.wikiIndex.add(name, content);
     await this.sync.commit(`update memory: added wiki page ${name}`);
   }
 
