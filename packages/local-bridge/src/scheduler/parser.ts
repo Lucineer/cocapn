@@ -5,9 +5,9 @@
  * Supports standard cron expressions and shortcuts like @daily, @hourly, @weekly.
  */
 
-import matter from 'gray-matter';
-import { promises as fs } from 'fs';
-import { join } from 'path';
+import matter from "gray-matter";
+import { promises as fs } from "fs";
+import { join } from "path";
 
 /**
  * A scheduled task parsed from a markdown file with YAML frontmatter.

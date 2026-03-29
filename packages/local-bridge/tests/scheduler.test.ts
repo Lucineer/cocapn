@@ -2,9 +2,9 @@
  * Tests for the scheduled task parser.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { promises as fs } from 'fs';
-import { join } from 'path';
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { promises as fs } from "fs";
+import { join } from "path";
 import {
   parseScheduledTask,
   validateCron,
