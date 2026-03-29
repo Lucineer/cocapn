@@ -1,7 +1,7 @@
 {
   "name": "cocapn",
   "version": "0.1.0",
-  "description": "Unified CLI tool for cocapn agent runtime and fleet protocol",
+  "description": "Cocapn — The self-hosted AI agent runtime by Superinstance",
   "type": "module",
   "bin": {
     "cocapn": "./bin/cocapn.js"
@@ -21,14 +21,25 @@
     "prepublishOnly": "npm run build"
   },
   "keywords": [
+    "ai",
+    "agent",
+    "runtime",
+    "self-hosted",
+    "llm",
+    "mcp",
+    "fleet",
     "cocapn",
-    "cli",
-    "agents",
-    "git",
-    "websocket"
+    "superinstance"
   ],
-  "author": "cocapn contributors",
+  "author": "Superinstance <team@superinstance.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CedarBeach2019/cocapn"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "commander": "^12.0.0",
     "ws": "^8.16.0"
@@ -43,8 +54,8 @@
     "node": ">=18.0.0"
   },
   "files": [
-    "bin",
-    "dist",
+    "bin/",
+    "dist/",
     "README.md"
   ]
 }
