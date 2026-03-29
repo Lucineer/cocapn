@@ -17,6 +17,7 @@ import type { ChatRouter } from "./chat-router.js";
 import type { SkillLoader } from "../skills/loader.js";
 import type { SkillDecisionTree } from "../skills/decision-tree.js";
 import type { RepoGraph } from "../graph/index.js";
+import type { HandoffProcessor } from "../handoff/processor.js";
 
 // ─── Server options (unchanged from current contract) ────────────────────────
 
@@ -48,6 +49,8 @@ export interface BridgeServerOptions {
   decisionTree: SkillDecisionTree | undefined;
   /** Repo graph — code structure knowledge graph */
   repoGraph: RepoGraph | undefined;
+  /** Handoff processor — enables inter-module delegation */
+  handoffProcessor: HandoffProcessor | undefined;
 }
 
 // ─── Event map ───────────────────────────────────────────────────────────────
@@ -76,7 +79,10 @@ export type TypedMessageType =
   | "A2A_REQUEST"
   | "MODULE_INSTALL"
   | "INSTALL_MODULE"
-  | "CHANGE_SKIN";
+  | "CHANGE_SKIN"
+  | "RUN_TESTS"
+  | "GENERATE_TESTS"
+  | "TEST_STATUS";
 
 export interface TypedMessage {
   type: TypedMessageType;

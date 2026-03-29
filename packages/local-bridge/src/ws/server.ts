@@ -45,6 +45,7 @@ import { handleA2aRequest } from "../handlers/a2a.js";
 import { handleModuleInstall } from "../handlers/module.js";
 import { handleChangeSkin } from "../handlers/skin.js";
 import { handleHttpPeerRequest } from "../handlers/peer.js";
+import { handleRunTests, handleGenerateTests, handleTestStatus } from "../handlers/test.js";
 import { HealthChecker, checkGit, checkBrain, checkDisk, checkWebSocket, type SystemHealthStatus } from "../health/index.js";
 import { createOfflineQueue, OfflineQueue } from "../cloud-bridge/offline-queue.js";
 import { TokenTracker } from "../metrics/token-tracker.js";
@@ -118,6 +119,9 @@ export class BridgeServer extends EventEmitter<BridgeServerEventMap> {
       ["MODULE_INSTALL", handleModuleInstall],
       ["INSTALL_MODULE", handleModuleInstall],
       ["CHANGE_SKIN", handleChangeSkin],
+      ["RUN_TESTS", handleRunTests],
+      ["GENERATE_TESTS", handleGenerateTests],
+      ["TEST_STATUS", handleTestStatus],
     ]);
 
     // ChatHandler needs broadcast and moduleManager

@@ -37,6 +37,18 @@ export interface TokenRecord {
 }
 
 /**
+ * A test run record for tracking test execution.
+ */
+export interface TestRunRecord {
+  file: string;
+  passed: number;
+  failed: number;
+  total: number;
+  duration: number;
+  timestamp: string;
+}
+
+/**
  * Aggregated token statistics.
  */
 export interface TokenStats {
@@ -93,6 +105,7 @@ export class TokenTracker {
   private records: TokenRecord[] = [];
   private maxRecords: number;
   private nextId = 0;
+  private testRuns: TestRunRecord[] = [];
 
   constructor(options: TokenTrackerOptions = {}) {
     this.maxRecords = options.maxRecords ?? 10000;
@@ -161,6 +174,40 @@ export class TokenTracker {
       duration: params.duration,
       success: params.success,
     });
+  }
+
+  /**
+   * Record a test run result.
+   */
+  addTestRun(params: {
+    file: string;
+    passed: number;
+    failed: number;
+    total: number;
+    duration: number;
+  }): void {
+    const record: TestRunRecord = {
+      file: params.file,
+      passed: params.passed,
+      failed: params.failed,
+      total: params.total,
+      duration: params.duration,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.testRuns.push(record);
+
+    // Keep only the last 100 test runs
+    if (this.testRuns.length > 100) {
+      this.testRuns.shift();
+    }
+  }
+
+  /**
+   * Get recent test run results.
+   */
+  getTestRuns(limit: number = 10): TestRunRecord[] {
+    return this.testRuns.slice(-limit);
   }
 
   // ---------------------------------------------------------------------------
