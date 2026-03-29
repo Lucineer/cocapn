@@ -71,6 +71,7 @@ import type { CloudConnector } from "../cloud-bridge/connector.js";
 import { SettingsManager } from "../settings/index.js";
 import { handleChatStream } from "../handlers/llm.js";
 import { handleMemoryListTyped, handleMemoryAddTyped, handleMemoryDeleteTyped, handleWikiListTyped, handleWikiReadTyped, handleSoulGetTyped } from "../handlers/memory.js";
+import { handleFleetJoin, handleFleetSubmitTask, handleFleetTaskStatus, handleFleetListAgents, handleFleetHeartbeat } from "../handlers/fleet.js";
 
 // Re-export types for backward compatibility
 export type { BridgeServerOptions, BridgeServerEventMap, TypedMessage, JsonRpcRequest, SessionState };
@@ -162,6 +163,11 @@ export class BridgeServer extends EventEmitter<BridgeServerEventMap> {
       ["WIKI_LIST", handleWikiListTyped],
       ["WIKI_READ", handleWikiReadTyped],
       ["SOUL_GET", handleSoulGetTyped],
+      ["FLEET_JOIN", handleFleetJoin],
+      ["FLEET_SUBMIT_TASK", handleFleetSubmitTask],
+      ["FLEET_TASK_STATUS", handleFleetTaskStatus],
+      ["FLEET_LIST_AGENTS", handleFleetListAgents],
+      ["FLEET_HEARTBEAT", handleFleetHeartbeat],
     ]);
 
     // ChatHandler needs broadcast and moduleManager

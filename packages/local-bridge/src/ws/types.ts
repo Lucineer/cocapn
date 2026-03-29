@@ -146,7 +146,12 @@ export type TypedMessageType =
   | "MEMORY_DELETE"
   | "WIKI_LIST"
   | "WIKI_READ"
-  | "SOUL_GET";
+  | "SOUL_GET"
+  | "FLEET_JOIN"
+  | "FLEET_SUBMIT_TASK"
+  | "FLEET_TASK_STATUS"
+  | "FLEET_LIST_AGENTS"
+  | "FLEET_HEARTBEAT";
 
 export interface TypedMessage {
   type: TypedMessageType;
