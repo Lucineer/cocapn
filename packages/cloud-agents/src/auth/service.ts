@@ -22,7 +22,7 @@ import {
   validatePassword,
   isCommonPassword,
 } from "./password.js";
-import { generateTokenPair, verifyAccessToken, type JwtPayload } from "./tokens.js";
+import { generateTokenPair, generateAccessToken, verifyAccessToken, type JwtPayload } from "./tokens.js";
 
 // Error codes
 export const ERRORS = {
@@ -43,6 +43,18 @@ export const ERRORS = {
 } as const;
 
 /**
+ * Require FLEET_JWT_SECRET to be set in the environment.
+ * Throws if the secret is missing or empty — never fall back to a default.
+ */
+function requireJwtSecret(env: { FLEET_JWT_SECRET?: string }): string {
+  const secret = env.FLEET_JWT_SECRET;
+  if (!secret) {
+    throw new Error("configuration_error: FLEET_JWT_SECRET is not set");
+  }
+  return secret;
+}
+
+/**
  * Create a new user account.
  *
  * @param env - Worker environment with ADMIRAL DO and KV
@@ -55,7 +67,7 @@ export const ERRORS = {
  * @throws Error with error code if validation fails or user exists
  */
 export async function createUser(
-  env: { ADMIRAL: DurableObjectNamespace; AUTH_KV: KVNamespace },
+  env: { ADMIRAL: DurableObjectNamespace; AUTH_KV: KVNamespace; FLEET_JWT_SECRET?: string },
   email: string,
   password: string,
   name: string,
@@ -133,7 +145,7 @@ export async function createUser(
       instance: user.instance,
       plan: user.plan,
     },
-    env.FLEET_JWT_SECRET ?? "default-secret"
+    requireJwtSecret(env)
   );
 
   // Store refresh token in KV
@@ -163,7 +175,7 @@ export async function createUser(
  * @throws Error with error code if credentials are invalid
  */
 export async function authenticate(
-  env: { ADMIRAL: DurableObjectNamespace; AUTH_KV: KVNamespace },
+  env: { ADMIRAL: DurableObjectNamespace; AUTH_KV: KVNamespace; FLEET_JWT_SECRET?: string },
   email: string,
   password: string,
   ip?: string
@@ -220,7 +232,7 @@ export async function authenticate(
       instance: user.instance,
       plan: user.plan,
     },
-    env.FLEET_JWT_SECRET ?? "default-secret"
+    requireJwtSecret(env)
   );
 
   // Store refresh token in KV
@@ -249,11 +261,11 @@ export async function authenticate(
  * @throws Error with error code if token is invalid
  */
 export async function verifyToken(
-  env: { ADMIRAL: DurableObjectNamespace },
+  env: { ADMIRAL: DurableObjectNamespace; FLEET_JWT_SECRET?: string },
   token: string
 ): Promise<UserResponse> {
   // Verify JWT
-  const payload = await verifyAccessToken(token, env.FLEET_JWT_SECRET ?? "default-secret");
+  const payload = await verifyAccessToken(token, requireJwtSecret(env));
 
   // Fetch user from database
   const admiralStub = env.ADMIRAL.get(env.ADMIRAL.idFromName("auth"));
@@ -293,7 +305,7 @@ export async function verifyToken(
  * @throws Error with error code if refresh token is invalid
  */
 export async function refreshToken(
-  env: { ADMIRAL: DurableObjectNamespace; AUTH_KV: KVNamespace },
+  env: { ADMIRAL: DurableObjectNamespace; AUTH_KV: KVNamespace; FLEET_JWT_SECRET?: string },
   refreshToken: string
 ): Promise<{ accessToken: string; expiresIn: number }> {
   // Look up refresh token in KV
@@ -339,7 +351,7 @@ export async function refreshToken(
       instance: user.instance,
       plan: user.plan,
     },
-    env.FLEET_JWT_SECRET ?? "default-secret"
+    requireJwtSecret(env)
   );
 
   return {

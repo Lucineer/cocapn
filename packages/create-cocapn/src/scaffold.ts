@@ -150,6 +150,8 @@ export function cloneRepos(
     const url = `https://oauth2:${token}@github.com/${username}/${repoName}.git`;
     mkdirSync(destDir, { recursive: true });
     execSync(`git clone "${url}" "${destDir}"`, { stdio: "pipe" });
+    // SECURITY: Remove PAT from .git/config to prevent plaintext credential leak
+    execSync(`git -C "${destDir}" remote set-url origin "https://github.com/${username}/${repoName}.git"`, { stdio: "pipe" });
   }
 
   return { publicDir, privateDir };

@@ -1,10 +1,19 @@
 /**
  * Plugin Sandbox — Execute cold plugin skills in isolated subprocess
  *
+ * ⚠️ SECURITY WARNING:
+ * Cold skills run in isolated child processes with timeout and memory limits.
+ * Hot skills run IN THE BRIDGE PROCESS with full access to all resources.
+ * Only install plugins from trusted sources.
+ *
+ * Permission checks (isNetworkAllowed, isFsAccessAllowed, isShellAllowed)
+ * are available but NOT yet enforced in the execution path (tracked as TODO).
+ * Until enforced, all cold skill permissions are advisory only.
+ *
  * Cold skills run in isolated Node.js processes with:
  * - Timeout enforcement
- * - Memory limit enforcement
- * - Permission-based access control
+ * - Memory limit enforcement (via child process isolation)
+ * - Permission-based access control (advisory — enforcement TODO)
  * - Clean IPC via stdio JSON-RPC
  */
 

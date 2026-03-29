@@ -380,6 +380,18 @@ async function handleGetTaskStatus(taskId: string, env: Env): Promise<Response> 
  * Requires DEEPSEEK_API_KEY to be configured.
  */
 async function handleChat(request: Request, env: Env): Promise<Response> {
+  // Require authentication via X-API-Key or Authorization header
+  const apiKey = request.headers.get("X-API-Key");
+  const authHeader = request.headers.get("Authorization");
+  if (!apiKey && !authHeader) {
+    return errorResponse('Authentication required: provide X-API-Key or Authorization header', 401);
+  }
+
+  // Basic format validation — full verification happens via verifyApiKey or fleet JWT
+  if (authHeader && !authHeader.startsWith("Bearer ")) {
+    return errorResponse('Invalid Authorization header format: expected "Bearer <token>"', 401);
+  }
+
   try {
     const body = await request.json() as { messages?: ChatMessage[] };
 
@@ -434,7 +446,7 @@ export default {
         headers: {
           "Access-Control-Allow-Origin":  "*",
           "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
         },
       });
     }

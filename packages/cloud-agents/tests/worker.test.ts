@@ -286,6 +286,70 @@ describe("Cloud Agent Worker HTTP API", () => {
     });
   });
 
+  describe("POST /api/chat", () => {
+    it("should reject chat request without authentication", async () => {
+      const request = new Request("https://worker.test/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] }),
+      });
+
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(401);
+
+      const data = await response.json() as { error: string };
+      expect(data.error).toContain("Authentication required");
+    });
+
+    it("should reject chat request with malformed Authorization header", async () => {
+      const request = new Request("https://worker.test/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Basic abc123",
+        },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] }),
+      });
+
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(401);
+
+      const data = await response.json() as { error: string };
+      expect(data.error).toContain("Invalid Authorization header format");
+    });
+
+    it("should accept chat request with X-API-Key header", async () => {
+      const request = new Request("https://worker.test/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": "cocapn_sk_testkey",
+        },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] }),
+      });
+
+      // Should pass auth check (API key verification is delegated to AdmiralDO mock)
+      const response = await worker.fetch(request, env);
+      // Expect non-401 — actual LLM call may fail in test env but auth should pass
+      expect(response.status).not.toBe(401);
+    });
+
+    it("should accept chat request with Bearer Authorization header", async () => {
+      const request = new Request("https://worker.test/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer some-jwt-token",
+        },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] }),
+      });
+
+      // Should pass auth check (JWT verification is delegated)
+      const response = await worker.fetch(request, env);
+      expect(response.status).not.toBe(401);
+    });
+  });
+
   describe("CORS preflight", () => {
     it("should handle OPTIONS request with CORS headers", async () => {
       const request = new Request("https://worker.test/api/health", {

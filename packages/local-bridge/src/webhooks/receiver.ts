@@ -45,7 +45,7 @@ export class WebhookReceiver {
     this.webhookManager = webhookManager;
     this.config = {
       port: config.port || 8788,
-      host: config.host || '0.0.0.0',
+      host: config.host || 'localhost',
       pathPrefix: config.pathPrefix || '/api/webhooks',
     };
     this.githubHandler = new GitHubWebhookHandler();
