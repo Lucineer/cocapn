@@ -618,6 +618,163 @@ async function handleBridgeMethod(method: string, params: unknown, ctx: HandlerC
       return { success: true, validation };
     }
 
+    case "webhook/list": {
+      const manager = ctx.getModuleManager();
+      const webhookManager = manager.get("webhooks");
+      if (!webhookManager) {
+        return { error: "Webhook manager not available" };
+      }
+      const webhooks = webhookManager.listWebhooks();
+      return {
+        success: true,
+        webhooks: webhooks.map(w => ({
+          id: w.id,
+          name: w.name,
+          url: w.url,
+          events: w.events,
+          enabled: w.enabled,
+          createdAt: w.createdAt,
+          lastTriggered: w.lastTriggered,
+          successCount: w.successCount,
+          failureCount: w.failureCount,
+        })),
+      };
+    }
+
+    case "webhook/create": {
+      const manager = ctx.getModuleManager();
+      const webhookManager = manager.get("webhooks");
+      if (!webhookManager) {
+        return { error: "Webhook manager not available" };
+      }
+      const name = p.name as string | undefined;
+      const url = p.url as string | undefined;
+      const events = p.events as string[] | undefined;
+      const secret = p.secret as string | undefined;
+      if (!name || !url || !events) {
+        return { error: "Missing required parameters: name, url, events" };
+      }
+      const webhook = webhookManager.createWebhook(name, url, events, secret);
+      return {
+        success: true,
+        webhook: {
+          id: webhook.id,
+          name: webhook.name,
+          url: webhook.url,
+          events: webhook.events,
+          secret: webhook.secret, // Only returned on creation
+          enabled: webhook.enabled,
+          createdAt: webhook.createdAt,
+        },
+      };
+    }
+
+    case "webhook/delete": {
+      const manager = ctx.getModuleManager();
+      const webhookManager = manager.get("webhooks");
+      if (!webhookManager) {
+        return { error: "Webhook manager not available" };
+      }
+      const id = p.id as string | undefined;
+      if (!id) {
+        return { error: "Missing webhook id" };
+      }
+      const deleted = webhookManager.deleteWebhook(id);
+      return { success: true, deleted, id };
+    }
+
+    case "webhook/update": {
+      const manager = ctx.getModuleManager();
+      const webhookManager = manager.get("webhooks");
+      if (!webhookManager) {
+        return { error: "Webhook manager not available" };
+      }
+      const id = p.id as string | undefined;
+      if (!id) {
+        return { error: "Missing webhook id" };
+      }
+      const webhook = webhookManager.getWebhook(id);
+      if (!webhook) {
+        return { error: "Webhook not found" };
+      }
+      const updates: Record<string, unknown> = {};
+      if (p.name !== undefined) updates.name = p.name;
+      if (p.url !== undefined) updates.url = p.url;
+      if (p.events !== undefined) updates.events = p.events;
+      if (p.enabled !== undefined) updates.enabled = p.enabled;
+      const updated = webhookManager.updateWebhook(id, updates);
+      return {
+        success: true,
+        webhook: updated ? {
+          id: updated.id,
+          name: updated.name,
+          url: updated.url,
+          events: updated.events,
+          enabled: updated.enabled,
+          createdAt: updated.createdAt,
+          lastTriggered: updated.lastTriggered,
+          successCount: updated.successCount,
+          failureCount: updated.failureCount,
+        } : null,
+      };
+    }
+
+    case "webhook/deliveries": {
+      const manager = ctx.getModuleManager();
+      const webhookManager = manager.get("webhooks");
+      if (!webhookManager) {
+        return { error: "Webhook manager not available" };
+      }
+      const id = p.id as string | undefined;
+      if (!id) {
+        return { error: "Missing webhook id" };
+      }
+      const webhook = webhookManager.getWebhook(id);
+      if (!webhook) {
+        return { error: "Webhook not found" };
+      }
+      const deliveries = webhookManager.getDeliveries(id);
+      return {
+        success: true,
+        deliveries: deliveries.map(d => ({
+          id: d.id,
+          webhookId: d.webhookId,
+          eventId: d.eventId,
+          status: d.status,
+          responseCode: d.responseCode,
+          responseBody: d.responseBody,
+          attempts: d.attempts,
+          createdAt: d.createdAt,
+        })),
+      };
+    }
+
+    case "webhook/trigger": {
+      const manager = ctx.getModuleManager();
+      const webhookManager = manager.get("webhooks");
+      if (!webhookManager) {
+        return { error: "Webhook manager not available" };
+      }
+      const type = p.type as string | undefined;
+      const payload = p.payload as unknown | undefined;
+      if (!type) {
+        return { error: "Missing event type" };
+      }
+      const results = await webhookManager.triggerEvent(type, payload);
+      return { success: true, results, count: results.length };
+    }
+
+    case "webhook/retry": {
+      const manager = ctx.getModuleManager();
+      const webhookManager = manager.get("webhooks");
+      if (!webhookManager) {
+        return { error: "Webhook manager not available" };
+      }
+      const maxRetries = p.maxRetries as number | undefined;
+      await webhookManager.retryFailed(maxRetries);
+      return { success: true };
+    }
+
     default:
       throw Object.assign(new Error(`Unknown bridge method: ${method}`), { code: -32601 });
   }
