@@ -231,6 +231,7 @@ export class BridgeServer extends EventEmitter<BridgeServerEventMap> {
       skillLoader: this.options.skillLoader,
       decisionTree: this.options.decisionTree,
       repoGraph,
+      bridge: this.options.bridge,
       getModuleManager: () => {
         if (!moduleManagerRef.current) {
           moduleManagerRef.current = new ModuleManager(this.options.repoRoot);

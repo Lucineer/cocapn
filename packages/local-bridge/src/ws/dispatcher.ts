@@ -298,6 +298,11 @@ async function handleBridgeMethod(method: string, params: unknown, ctx: HandlerC
       };
     }
 
+    case "bridge/assembly": {
+      const { handleAssemblyStatus } = await import("../handlers/assembly.js");
+      return handleAssemblyStatus(params, ctx);
+    }
+
     case "graph/query": {
       if (!ctx.brain || !ctx.brain.hasGraph()) {
         return { error: "Repo graph not available" };

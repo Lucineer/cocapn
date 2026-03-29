@@ -28,6 +28,38 @@ import type { SkillDecisionTree } from "../skills/decision-tree.js";
 import type { RepoGraph } from "../graph/index.js";
 import type { HandoffProcessor } from "../handoff/processor.js";
 
+// Forward declaration for Bridge to avoid circular dependency
+export interface BridgeLike {
+  getAssembly(): {
+    success: boolean;
+    profile: {
+      language: string;
+      framework: string | undefined;
+      packageManager: string;
+      hasTests: boolean;
+      hasCI: boolean;
+      testCommand: string;
+      buildCommand: string | undefined;
+      entryPoints: string[];
+      totalFiles: number;
+      totalDirs: number;
+    };
+    template: {
+      template: string;
+      confidence: number;
+      modules: string[];
+      personality: string;
+      displayName: string;
+      description: string;
+    };
+    modules: string[];
+    skills: string[];
+    config: Record<string, unknown>;
+    duration: number;
+    error?: string;
+  } | undefined;
+}
+
 /**
  * Everything a handler needs to do its job.
  * Passed by reference — handlers must NOT mutate config.
@@ -51,6 +83,7 @@ export interface HandlerContext {
   readonly decisionTree: SkillDecisionTree | undefined;
   readonly repoGraph: RepoGraph | undefined;
   readonly handoffProcessor: HandoffProcessor | undefined;
+  readonly bridge: BridgeLike | undefined;
 
   // Mutable — lazily created
   getModuleManager(): ModuleManager;

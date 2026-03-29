@@ -36,7 +36,9 @@ import { Publisher } from "./publishing/publisher.js";
 import { SkillLoader } from "./skills/loader.js";
 import { SkillDecisionTree } from "./skills/decision-tree.js";
 import { RepoGraph } from "./graph/index.js";
+import { SelfAssembler, SelfAssembler as AssemblySystem } from "./assembly/index.js";
 import type { BridgeConfig } from "./config/types.js";
+import type { AssemblyResult } from "./assembly/index.js";
 
 // ─── AdmiralClient (optional import — avoids hard dep on cloud-agents pkg) ────
 
@@ -89,12 +91,17 @@ export class Bridge {
   private skillLoader:   SkillLoader;
   private decisionTree:  SkillDecisionTree;
   private repoGraph:     RepoGraph;
+  private assembly:      AssemblyResult | undefined;
+  private assembler:     AssemblySystem;
 
   constructor(options: BridgeOptions) {
     this.options    = options;
     this.instanceId = `bridge-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     this.validator  = new SchemaValidator();
     this.config     = loadConfig(options.privateRepoRoot);
+
+    // Initialize self-assembly system
+    this.assembler = new SelfAssembler(options.privateRepoRoot);
 
     if (options.port !== undefined) {
       this.config = {
@@ -162,6 +169,7 @@ export class Bridge {
       decisionTree:   this.decisionTree,
       repoGraph:      this.repoGraph,
       enablePeerApi:  true,
+      bridge:         this,
     });
   }
 
@@ -176,6 +184,11 @@ export class Bridge {
     console.info(`[bridge] Repo:      ${this.options.privateRepoRoot}`);
     console.info(`[bridge] Auth:      ${this.options.skipAuth ? "disabled" : "GitHub PAT"}`);
     console.info(`[bridge] Cloud:     ${this.cloudAdapters ? "enabled" : "local-only"}`);
+
+    // Run self-assembly on first run
+    console.info("[bridge] Running self-assembly…");
+    this.assembly = await this.assembler.assemble();
+    console.info(AssemblySystem.formatStatus(this.assembly));
 
     await this.secrets.loadIdentity();
 
@@ -258,6 +271,7 @@ export class Bridge {
   getConfig():      BridgeConfig           { return this.config; }
   getSecrets():     SecretManager          { return this.secrets; }
   getCloudAdapters(): CloudAdapterRegistry | undefined { return this.cloudAdapters; }
+  getAssembly():    AssemblyResult | undefined { return this.assembly; }
 
   // ---------------------------------------------------------------------------
   // Cloud config loading

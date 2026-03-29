@@ -19,6 +19,38 @@ import type { SkillDecisionTree } from "../skills/decision-tree.js";
 import type { RepoGraph } from "../graph/index.js";
 import type { HandoffProcessor } from "../handoff/processor.js";
 
+// Forward declaration for Bridge to avoid circular dependency
+export interface BridgeLike {
+  getAssembly(): {
+    success: boolean;
+    profile: {
+      language: string;
+      framework: string | undefined;
+      packageManager: string;
+      hasTests: boolean;
+      hasCI: boolean;
+      testCommand: string;
+      buildCommand: string | undefined;
+      entryPoints: string[];
+      totalFiles: number;
+      totalDirs: number;
+    };
+    template: {
+      template: string;
+      confidence: number;
+      modules: string[];
+      personality: string;
+      displayName: string;
+      description: string;
+    };
+    modules: string[];
+    skills: string[];
+    config: Record<string, unknown>;
+    duration: number;
+    error?: string;
+  } | undefined;
+}
+
 // ─── Server options (unchanged from current contract) ────────────────────────
 
 export interface BridgeServerOptions {
@@ -51,6 +83,8 @@ export interface BridgeServerOptions {
   repoGraph: RepoGraph | undefined;
   /** Handoff processor — enables inter-module delegation */
   handoffProcessor: HandoffProcessor | undefined;
+  /** Bridge instance — provides access to assembly and other bridge-level data */
+  bridge?: BridgeLike;
 }
 
 // ─── Event map ───────────────────────────────────────────────────────────────
