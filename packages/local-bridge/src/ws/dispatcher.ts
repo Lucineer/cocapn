@@ -864,9 +864,9 @@ async function handleBridgeMethod(method: string, params: unknown, ctx: HandlerC
       }
       const tenant = await ctx.tenantRegistry.createTenant({
         name,
-        plan: p.plan as "free" | "pro" | "enterprise" | undefined,
-        config: p.config as Record<string, unknown> | undefined,
-        allowedOrigins: p.allowedOrigins as string[] | undefined,
+        ...(p.plan !== undefined ? { plan: p.plan as "free" | "pro" | "enterprise" } : {}),
+        ...(p.config !== undefined ? { config: p.config as Partial<import("../multi-tenant/types.js").TenantConfig> } : {}),
+        ...(p.allowedOrigins !== undefined ? { allowedOrigins: p.allowedOrigins as string[] } : {}),
       });
       if (ctx.tenantBridge) {
         await ctx.tenantBridge.initializeTenant(tenant.id);
