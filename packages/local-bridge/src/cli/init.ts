@@ -271,17 +271,20 @@ ${bold(cyan("   ╚═════╝ ╚═════╝  ╚═════�
 
     // ── Push setup ────────────────────────────────────────────────────────────
     progress("Pushing initial commits…");
-    pushRepo(publicDir, token, githubLogin);
-    pushRepo(privateDir, token, githubLogin);
-    ok("Pushed");
-
-    // ── Strip PAT from remote URLs ────────────────────────────────────────────
-    // The PAT was embedded in the remote URL for the initial push.
-    // Replace it with the clean HTTPS URL so credentials are no longer on disk.
-    progress("Cleaning remote URLs…");
-    stripPatFromRemote(publicDir,  githubLogin, publicRepo);
-    stripPatFromRemote(privateDir, githubLogin, privateRepo);
-    ok("Remote URLs cleaned (PAT removed from .git/config)");
+    try {
+      pushRepo(publicDir, token, githubLogin);
+      pushRepo(privateDir, token, githubLogin);
+      ok("Pushed");
+    } finally {
+      // ── Strip PAT from remote URLs ────────────────────────────────────────────
+      // The PAT was embedded in the remote URL for the initial push.
+      // Replace it with the clean HTTPS URL so credentials are no longer on disk.
+      // This runs even if push fails, ensuring PAT is never left on disk.
+      progress("Cleaning remote URLs…");
+      stripPatFromRemote(publicDir,  githubLogin, publicRepo);
+      stripPatFromRemote(privateDir, githubLogin, privateRepo);
+      ok("Remote URLs cleaned (PAT removed from .git/config)");
+    }
 
     // ── Install modules if full template ─────────────────────────────────────
     if (templateSlug === "full") {

@@ -24,7 +24,7 @@ export const handleBash: TypedHandler = async (
   const rawCwd = (msg["cwd"] as string | undefined) ?? ctx.repoRoot;
 
   if (!command) {
-    ctx.sender.typed(ws, { type: "BASH_OUTPUT", id: msg.id, done: true, error: "Missing command" });
+    ctx.sender.typed(ws, { type: "BASH_OUTPUT", id: msg.id, done: true, error: "COCAPN-050: Missing command - Provide a command to execute. Example: { type: 'BASH', command: 'ls -la' }" });
     return;
   }
 
@@ -41,7 +41,7 @@ export const handleBash: TypedHandler = async (
       detail: "cwd outside repo root",
       durationMs: undefined,
     });
-    ctx.sender.typed(ws, { type: "BASH_OUTPUT", id: msg.id, done: true, error: "cwd outside repo root" });
+    ctx.sender.typed(ws, { type: "BASH_OUTPUT", id: msg.id, done: true, error: "COCAPN-051: cwd outside repo root - The working directory escapes the repository. Use a path within the repo" });
     return;
   }
 

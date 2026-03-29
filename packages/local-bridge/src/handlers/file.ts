@@ -24,7 +24,7 @@ export const handleFileEdit: TypedHandler = async (
   const content = msg["content"] as string | undefined;
 
   if (!relPath || content === undefined) {
-    ctx.sender.typed(ws, { type: "FILE_EDIT_RESULT", id: msg.id, ok: false, error: "Missing path or content" });
+    ctx.sender.typed(ws, { type: "FILE_EDIT_RESULT", id: msg.id, ok: false, error: "COCAPN-052: Missing path or content - Provide both 'path' and 'content' when editing files" });
     return;
   }
 

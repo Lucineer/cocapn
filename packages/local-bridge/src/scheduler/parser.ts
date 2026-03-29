@@ -251,7 +251,7 @@ export function nextRunTime(cron: string, timezone: string): Date {
   // Parse cron expression
   const parts = expandedCron.split(/\s+/);
   if (parts.length !== 5) {
-    throw new Error(`Invalid cron expression: ${cron}`);
+    throw new Error(`COCAPN-060: Invalid cron expression: ${cron} - Check the cron expression format. Example: '0 9 * * 1-5' for weekdays at 9am`);
   }
 
   const [minutePart, hourPart, dayOfMonthPart, monthPart, dayOfWeekPart] = parts;
@@ -302,7 +302,7 @@ export function nextRunTime(cron: string, timezone: string): Date {
     }
   }
 
-  throw new Error(`Could not calculate next run time for cron expression: ${cron}`);
+  throw new Error(`COCAPN-061: Could not calculate next run time for cron expression: ${cron} - The cron expression may be invalid or use unsupported features`);
 }
 
 /**
@@ -382,17 +382,17 @@ export function parseScheduledTask(content: string, id: string = 'unknown'): Sch
 
   // Validate required fields
   if (!data.cron) {
-    throw new Error('Missing required field: cron');
+    throw new Error('COCAPN-062: Missing required field: cron - Provide a cron expression in the scheduled task');
   }
 
   if (!data.agent) {
-    throw new Error('Missing required field: agent');
+    throw new Error('COCAPN-063: Missing required field: agent - Provide an agent ID for the scheduled task');
   }
 
   // Validate cron expression
   const cron = String(data.cron).trim();
   if (!validateCron(cron)) {
-    throw new Error(`Invalid cron expression: ${cron}`);
+    throw new Error(`COCAPN-064: Invalid scheduled task configuration - Check all required fields are present (cron, agent, prompt)`);
   }
 
   // Use defaults for optional fields

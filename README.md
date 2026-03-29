@@ -4,31 +4,84 @@
 
 Cocapn is a **repo-first hybrid agent OS** — a local WebSocket bridge that runs Claude Code, Pi, and other CLI agents on your machine, backed by an encrypted private Git repository, with an optional Cloudflare edge tier for 24/7 background tasks.
 
+## Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        Browser["Browser (your.domain.ai)"]
+        Browser -->|"WebSocket ws://localhost:8787<br/>or Cloudflare tunnel wss://..."| Bridge
+    end
+
+    subgraph "Bridge Layer"
+        Bridge["Local Bridge (cocapn-bridge)"]
+        Spawner["Agent Spawner"]
+        Router["Agent Router"]
+        Publisher["Git Publisher"]
+        Sync["Git Sync"]
+    end
+
+    subgraph "Agent Layer"
+        Agent1["Claude Code Agent"]
+        Agent2["Custom Agent"]
+        Agent3["MCP Tools"]
+    end
+
+    subgraph "Memory Layer"
+        Brain["Private Git Repo (encrypted brain)"]
+        Facts["facts.json"]
+        Wiki["wiki/"]
+        Tasks["tasks/"]
+        Secrets["secrets/*.age"]
+    end
+
+    subgraph "Cloud Layer"
+        Cloudflare["Cloudflare Workers"]
+        AdmiralDO["AdmiralDO<br/>(Task Queue)"]
+        Registry["Registry"]
+    end
+
+    Bridge --> Spawner
+    Bridge --> Router
+    Bridge --> Publisher
+    Bridge --> Sync
+
+    Spawner --> Agent1
+    Spawner --> Agent2
+    Spawner --> Agent3
+
+    Router --> Agent1
+    Router --> Agent2
+
+    Publisher --> Brain
+    Sync --> Brain
+
+    Agent1 --> Facts
+    Agent2 --> Wiki
+    Agent3 --> Tasks
+    Bridge --> Secrets
+
+    Bridge -->|"optional"| Cloudflare
+    Cloudflare --> AdmiralDO
+    Cloudflare --> Registry
 ```
-┌──────────────────────────────────────────────────────────┐
-│  Browser (your.domain.ai)                                │
-│  React SPA — served from GitHub Pages, zero hosting fee  │
-└───────────────────────┬──────────────────────────────────┘
-                        │ WebSocket (ws://localhost:8787)
-                        │ or Cloudflare tunnel (wss://…)
-┌───────────────────────▼──────────────────────────────────┐
-│  Local Bridge (cocapn-bridge)                            │
-│  Node.js · TypeScript · runs on your machine             │
-│  - Spawns agents (Claude Code, Pi, Copilot via MCP)      │
-│  - Syncs private repo via Git                            │
-│  - age-encrypted secrets, audit log, JWT fleet auth      │
-└───────────────────────┬──────────────────────────────────┘
-                        │
-          ┌─────────────┴──────────────┐
-          │                            │
-┌─────────▼──────────┐    ┌────────────▼────────────┐
-│  Private Git Repo  │    │  Cloudflare Workers      │
-│  (encrypted brain) │    │  (optional 24/7 agents)  │
-│  secrets/*.age     │    │  cloud-agents/            │
-│  cocapn/agents/    │    └──────────────────────────┘
-│  wiki/, tasks/     │
-└────────────────────┘
-```
+
+## How Updates Become Social: The Viral Loop
+
+Cocapn transforms personal updates into social content through a seamless workflow:
+
+1. **You interact with your agent** — Chat, write notes, or complete tasks in your private UI
+2. **Agent commits to Git** — Every action is auto-committed to your private repo
+3. **Publisher detects changes** — New commits trigger the publisher
+4. **Selective publishing** — Public content (wiki entries, blog posts) is pushed to your public repo
+5. **GitHub Pages deploys** — Your public repo is automatically served at `your.domain.ai`
+6. **Fleet discovers updates** — Other Cocapn instances can discover and follow your content
+7. **Social engagement** — Others can comment, reference, or build on your published content
+
+**Privacy by design:**
+- `private.*` facts never leave your private repo
+- Secrets are age-encrypted and never transmitted
+- You control exactly what gets published
 
 ## Philosophy
 
@@ -36,6 +89,26 @@ Cocapn is a **repo-first hybrid agent OS** — a local WebSocket bridge that run
 - **Local-first.** The bridge runs on your machine. No cloud required — Cloudflare is opt-in for background tasks.
 - **You own the keys.** Secrets are age-encrypted in your private repo. The bridge never sends plaintext secrets anywhere.
 - **Domain-branded.** Your instance lives at `you.makerlog.ai`, `you.studylog.ai`, or your own domain — served from your GitHub Pages.
+
+## Themed Domains
+
+Cocapn supports 11 themed domains, each with curated templates and personality:
+
+| Domain | Focus | Onboarding |
+|--------|-------|------------|
+| **personallog.ai** | Generic personal assistant | Simplest |
+| **businesslog.ai** | Professional/enterprise | Docker defaults, enterprise add-ons |
+| **makerlog.ai** | Developers & manufacturers | Dev templates |
+| **studylog.ai** | Education & research | Education templates |
+| **dmlog.ai** | TTRPG | Game console UI |
+| **activelog.ai** | Health & fitness | Fitness tracking |
+| **activeledger.ai** | Finance & crypto | Finance tools |
+| **fishinglog.ai** | Commercial & recreational fishing | Commercial vs recreational fork |
+| **playerlog.ai** | Video gamers | Gaming focus |
+| **reallog.ai** | Journalists & documentarians | Media tools |
+| **Custom domain** | Your brand | Full customization |
+
+**All features are installable on any domain.** Templates are curated starting points with personality, prompts, and default modules pre-configured.
 
 ## Quickstart
 
@@ -123,6 +196,7 @@ All secrets are age-encrypted at rest in your private repo. Agent subprocesses o
 - [Fleet & Multi-device](docs/fleet.md)
 - [Security](docs/security.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [Error Codes](docs/ERROR-CODES.md)
 
 ## License
 

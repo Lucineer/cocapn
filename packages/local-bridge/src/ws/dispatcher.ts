@@ -177,12 +177,12 @@ async function handleMcpMethod(method: string, params: unknown, ctx: HandlerCont
   const mcpMethod = parts.slice(2).join("/");
 
   if (!agentId || !mcpMethod) {
-    throw new Error(`Invalid MCP method path: ${method}`);
+    throw new Error(`COCAPN-040: Invalid MCP method path: ${method} - MCP methods must be formatted as 'mcp/{agentId}/{method}'. Check the method name`);
   }
 
   const agent = ctx.spawner.get(agentId);
   if (!agent) {
-    throw new Error(`Agent not running: ${agentId}`);
+    throw new Error(`COCAPN-013: Agent not running: ${agentId} - Start the agent first with: cocapn-bridge agent start ${agentId}`);
   }
 
   switch (mcpMethod) {
@@ -195,7 +195,7 @@ async function handleMcpMethod(method: string, params: unknown, ctx: HandlerCont
     case "resources/read":
       return agent.client.readResource((params as { uri: string }).uri);
     default:
-      throw new Error(`Unsupported MCP method: ${mcpMethod}`);
+      throw new Error(`COCAPN-041: Unsupported MCP method: ${mcpMethod} - The agent doesn't support this MCP method. Check the agent's capabilities`);
   }
 }
 
@@ -260,7 +260,7 @@ async function handleModuleMethod(
 
 async function handleA2aMethod(method: string, params: unknown, ctx: HandlerContext): Promise<unknown> {
   const agentDef = await ctx.router.resolveAndEnsureRunning(JSON.stringify(params));
-  if (!agentDef) throw new Error("No agent available for this task");
+  if (!agentDef) throw new Error("COCAPN-014: No agent available for this task - Ensure at least one agent is running. Start with: cocapn-bridge agent start <id>");
   return { routed: true, agent: agentDef.definition.id, source: agentDef.source, method };
 }
 

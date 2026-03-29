@@ -132,7 +132,7 @@ agent: "assistant"
 Invalid cron.
 `;
 
-      expect(() => parseScheduledTask(content, 'invalid-cron')).toThrow('Invalid cron expression');
+      expect(() => parseScheduledTask(content, 'invalid-cron')).toThrow(/COCAPN-064|Invalid cron/);
     });
 
     it('should handle disabled tasks', () => {
