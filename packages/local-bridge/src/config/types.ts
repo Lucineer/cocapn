@@ -7,6 +7,26 @@ export type BridgeMode = "local" | "hybrid" | "cloud";
 
 export type EmbeddingProvider = "local" | "openai";
 
+export interface LLMProviderConfig {
+  apiKey: string;
+  baseUrl?: string;
+}
+
+export interface LLMConfig {
+  /** Default model to use (e.g., 'deepseek-chat', 'gpt-4o', 'claude-sonnet-4-20250514') */
+  defaultModel?: string;
+  /** Provider configurations */
+  providers?: {
+    deepseek?: LLMProviderConfig;
+    openai?: LLMProviderConfig;
+    anthropic?: LLMProviderConfig;
+  };
+  /** Fallback models to try if primary fails */
+  fallbackModels?: string[];
+  /** Request timeout in milliseconds */
+  timeout?: number;
+}
+
 export interface VectorSearchConfig {
   /** Enable vector search (defaults to true, falls back to false if unavailable) */
   enabled: boolean;
@@ -58,6 +78,7 @@ export interface BridgeConfig {
   };
 
   vectorSearch?: VectorSearchConfig;
+  llm?: LLMConfig;
 }
 
 export const DEFAULT_CONFIG: BridgeConfig = {

@@ -20,6 +20,8 @@ import type { RepoGraph } from "../graph/index.js";
 import type { HandoffProcessor } from "../handoff/processor.js";
 import type { SettingsManager } from "../settings/index.js";
 import type { Analytics } from "../analytics/index.js";
+import type { LLMRouter } from "../llm/index.js";
+import type { ConversationMemory } from "../brain/conversation-memory.js";
 
 // Forward declaration for Bridge to avoid circular dependency
 export interface BridgeLike {
@@ -84,13 +86,17 @@ export interface BridgeServerOptions {
   /** Repo graph — code structure knowledge graph */
   repoGraph: RepoGraph | undefined;
   /** Handoff processor — enables inter-module delegation */
-  handoffProcessor: HandoffProcessor | undefined;
+  handoffProcessor?: HandoffProcessor;
   /** Bridge instance — provides access to assembly and other bridge-level data */
   bridge?: BridgeLike;
   /** Settings manager — manages bridge settings */
   settingsManager?: SettingsManager;
   /** Analytics — tracks usage, metrics, and exports */
   analytics?: Analytics;
+  /** LLM router — direct LLM provider integration */
+  llmRouter?: LLMRouter;
+  /** Conversation memory — fact extraction and context injection */
+  conversationMemory?: ConversationMemory;
 }
 
 // ─── Event map ───────────────────────────────────────────────────────────────
@@ -114,6 +120,7 @@ export interface JsonRpcRequest {
 
 export type TypedMessageType =
   | "CHAT"
+  | "CHAT_STREAM"
   | "BASH"
   | "FILE_EDIT"
   | "A2A_REQUEST"
@@ -130,7 +137,10 @@ export type TypedMessageType =
   | "STREAMING_DIFF_FINALIZE"
   | "STREAMING_DIFF_ROLLBACK"
   | "GET_SETTINGS"
-  | "UPDATE_SETTINGS";
+  | "UPDATE_SETTINGS"
+  | "MEMORY_LIST"
+  | "MEMORY_ADD"
+  | "MEMORY_DELETE";
 
 export interface TypedMessage {
   type: TypedMessageType;

@@ -2,8 +2,10 @@
  * Memory Handlers — WebSocket handlers for memory manager operations
  */
 
+import type { WebSocket } from 'ws';
 import type { MemoryManager, MemoryEntry } from '../brain/memory-manager.js';
 import type { HandlerContext } from './types.js';
+import type { TypedMessage } from '../ws/types.js';
 import { KnowledgePackExporter, KnowledgePackImporter, type KnowledgePack, type ExportOptions, type ImportOptions } from '../brain/knowledge-pack.js';
 
 /**
@@ -472,6 +474,108 @@ function getMemoryManager(context: HandlerContext): MemoryManager | null {
 
   return (brain as any).memoryManager || null;
 }
+
+// ─── Typed Message Handlers (for HandlerRegistry) ────────────────────────────
+//
+// These handle typed WebSocket messages: { type: "MEMORY_LIST", ... }
+// They are separate from the RPC handlers above which use JSON-RPC format.
+
+/**
+ * Handle MEMORY_LIST typed message — returns all stored facts.
+ */
+export async function handleMemoryListTyped(
+  ws: WebSocket,
+  clientId: string,
+  msg: TypedMessage,
+  ctx: HandlerContext,
+): Promise<void> {
+  if (!ctx.brain) {
+    ws.send(JSON.stringify({ type: "MEMORY_LIST_ERROR", id: msg.id, error: "Brain not available" }));
+    return;
+  }
+
+  const facts = ctx.brain.getAllFacts();
+  const entries = Object.entries(facts).map(([key, value]) => ({ key, value }));
+
+  ws.send(JSON.stringify({
+    type: "MEMORY_LIST",
+    id: msg.id,
+    facts: entries,
+    count: entries.length,
+  }));
+}
+
+/**
+ * Handle MEMORY_ADD typed message — manually add a fact.
+ */
+export async function handleMemoryAddTyped(
+  ws: WebSocket,
+  clientId: string,
+  msg: TypedMessage,
+  ctx: HandlerContext,
+): Promise<void> {
+  if (!ctx.brain) {
+    ws.send(JSON.stringify({ type: "MEMORY_ADD_ERROR", id: msg.id, error: "Brain not available" }));
+    return;
+  }
+
+  const key = msg["key"] as string | undefined;
+  const value = msg["value"] as string | undefined;
+
+  if (!key || !value) {
+    ws.send(JSON.stringify({ type: "MEMORY_ADD_ERROR", id: msg.id, error: "Missing key or value" }));
+    return;
+  }
+
+  await ctx.brain.setFact(key, value);
+
+  ws.send(JSON.stringify({
+    type: "MEMORY_ADD",
+    id: msg.id,
+    key,
+    value,
+    ok: true,
+  }));
+}
+
+/**
+ * Handle MEMORY_DELETE typed message — remove a fact.
+ */
+export async function handleMemoryDeleteTyped(
+  ws: WebSocket,
+  clientId: string,
+  msg: TypedMessage,
+  ctx: HandlerContext,
+): Promise<void> {
+  if (!ctx.brain) {
+    ws.send(JSON.stringify({ type: "MEMORY_DELETE_ERROR", id: msg.id, error: "Brain not available" }));
+    return;
+  }
+
+  const key = msg["key"] as string | undefined;
+
+  if (!key) {
+    ws.send(JSON.stringify({ type: "MEMORY_DELETE_ERROR", id: msg.id, error: "Missing key" }));
+    return;
+  }
+
+  const existing = ctx.brain.getFact(key);
+  if (existing === undefined) {
+    ws.send(JSON.stringify({ type: "MEMORY_DELETE_ERROR", id: msg.id, error: `Fact not found: ${key}` }));
+    return;
+  }
+
+  await ctx.brain.deleteFact(key);
+
+  ws.send(JSON.stringify({
+    type: "MEMORY_DELETE",
+    id: msg.id,
+    key,
+    ok: true,
+  }));
+}
+
+// ─── Serializer Helper ────────────────────────────────────────────────────────
 
 function serializeMemory(mem: MemoryEntry): Record<string, unknown> {
   return {

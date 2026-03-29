@@ -39,6 +39,7 @@ import type { TokenTracker } from "../metrics/token-tracker.js";
 import type { SkillLoader } from "../skills/loader.js";
 import type { SkillDecisionTree } from "../skills/decision-tree.js";
 import { TokenTracker as TT } from "../metrics/token-tracker.js";
+import type { ConversationMemory } from "../brain/conversation-memory.js";
 
 // ─── Deps ─────────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,8 @@ export interface ChatHandlerDeps {
   tokenTracker?: TokenTracker;
   skillLoader?: SkillLoader | undefined;
   decisionTree?: SkillDecisionTree | undefined;
+  /** Conversation memory — extracts facts and injects context */
+  conversationMemory?: ConversationMemory;
   /**
    * Broadcast a payload to ALL currently connected WebSocket clients.
    * Used for MODULE_LIST_UPDATE and SKIN_UPDATE_BROADCAST.
@@ -278,9 +281,17 @@ export class ChatHandler {
 
     try {
       // Prepend skill context if available
-      const enhancedContent = skillContext
+      let enhancedContent = skillContext
         ? `<skill_context>\n${skillContext}\n</skill_context>\n\nUser: ${content}`
         : content;
+
+      // Inject conversation memory context before sending to agent
+      if (this.deps.conversationMemory) {
+        const memoryPrompt = await this.deps.conversationMemory.buildMemoryPrompt(content);
+        if (memoryPrompt) {
+          enhancedContent = `<user_context>\n${memoryPrompt}\n</user_context>\n\n${enhancedContent}`;
+        }
+      }
 
       const result = await agent.client.callTool({
         name:      "chat",
@@ -289,6 +300,13 @@ export class ChatHandler {
       unsubscribe();
       const text = result.content.find((c) => c.type === "text")?.text ?? "";
       this.send(ws, { type: "CHAT_STREAM", id: msgId, chunk: text, done: true, agentId: definition.id, agentBadge });
+
+      // Extract and store facts from the conversation (best-effort)
+      if (this.deps.conversationMemory) {
+        this.deps.conversationMemory.extractAndStore(content, text).catch(() => {
+          // Non-fatal: don't let memory extraction break the chat flow
+        });
+      }
 
       // Track token usage
       const duration = Date.now() - startTime;

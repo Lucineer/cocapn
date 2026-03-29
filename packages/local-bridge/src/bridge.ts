@@ -32,12 +32,14 @@ import {
 import { ModuleManager } from "./modules/manager.js";
 import { FleetKeyManager } from "./security/fleet.js";
 import { Brain } from "./brain/index.js";
+import { ConversationMemory } from "./brain/conversation-memory.js";
 import { Publisher } from "./publishing/publisher.js";
 import { SkillLoader } from "./skills/loader.js";
 import { SkillDecisionTree } from "./skills/decision-tree.js";
 import { RepoGraph } from "./graph/index.js";
 import { SelfAssembler, SelfAssembler as AssemblySystem } from "./assembly/index.js";
 import { CloudConnector, type CloudConnectorConfig } from "./cloud-bridge/connector.js";
+import { LLMRouter, type LLMRouterConfig } from "./llm/index.js";
 import type { BridgeConfig } from "./config/types.js";
 import type { AssemblyResult } from "./assembly/index.js";
 
@@ -95,6 +97,7 @@ export class Bridge {
   private assembly:      AssemblyResult | undefined;
   private assembler:     AssemblySystem;
   private cloudConnector: CloudConnector | undefined;
+  private llmRouter:     LLMRouter | undefined;
 
   constructor(options: BridgeOptions) {
     this.options    = options;
@@ -144,6 +147,9 @@ export class Bridge {
       this.registry.attachCloud(this.cloudAdapters);
     }
 
+    // Initialize LLM router if LLM config is present
+    this.llmRouter = this.initLLMRouter();
+
     this.router = new AgentRouter(
       {
         rules:         [],
@@ -172,6 +178,8 @@ export class Bridge {
       repoGraph:      this.repoGraph,
       enablePeerApi:  true,
       bridge:         this,
+      llmRouter:      this.llmRouter,
+      conversationMemory: new ConversationMemory(this.brain),
     });
   }
 
@@ -301,6 +309,52 @@ export class Bridge {
   getSecrets():     SecretManager          { return this.secrets; }
   getCloudAdapters(): CloudAdapterRegistry | undefined { return this.cloudAdapters; }
   getAssembly():    AssemblyResult | undefined { return this.assembly; }
+  getLLMRouter():   LLMRouter | undefined { return this.llmRouter; }
+
+  // ---------------------------------------------------------------------------
+  // LLM initialization
+  // ---------------------------------------------------------------------------
+
+  private initLLMRouter(): LLMRouter | undefined {
+    const llmConfig = this.config.llm;
+    if (!llmConfig?.providers) return undefined;
+
+    // Check that at least one provider has an API key
+    const hasAnyKey = Object.values(llmConfig.providers).some(
+      (p) => p && p.apiKey
+    );
+    if (!hasAnyKey) return undefined;
+
+    const routerConfig: LLMRouterConfig = {
+      providers: {},
+      ...(llmConfig.defaultModel ? { defaultModel: llmConfig.defaultModel } : {}),
+      ...(llmConfig.fallbackModels ? { fallbackModels: llmConfig.fallbackModels } : {}),
+      ...(llmConfig.timeout ? { timeout: llmConfig.timeout } : {}),
+    };
+
+    if (llmConfig.providers.deepseek?.apiKey) {
+      routerConfig.providers.deepseek = {
+        apiKey: llmConfig.providers.deepseek.apiKey,
+        baseUrl: llmConfig.providers.deepseek.baseUrl,
+      };
+    }
+    if (llmConfig.providers.openai?.apiKey) {
+      routerConfig.providers.openai = {
+        apiKey: llmConfig.providers.openai.apiKey,
+        baseUrl: llmConfig.providers.openai.baseUrl,
+      };
+    }
+    if (llmConfig.providers.anthropic?.apiKey) {
+      routerConfig.providers.anthropic = {
+        apiKey: llmConfig.providers.anthropic.apiKey,
+        baseUrl: llmConfig.providers.anthropic.baseUrl,
+      };
+    }
+
+    const router = new LLMRouter(routerConfig);
+    console.info(`[bridge] LLM router initialized: ${router.getAvailableModels().join(', ')}`);
+    return router;
+  }
 
   // ---------------------------------------------------------------------------
   // Cloud config loading

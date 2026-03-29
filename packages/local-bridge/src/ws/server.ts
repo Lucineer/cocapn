@@ -69,6 +69,8 @@ import {
 } from "../handlers/cloud.js";
 import type { CloudConnector } from "../cloud-bridge/connector.js";
 import { SettingsManager } from "../settings/index.js";
+import { handleChatStream } from "../handlers/llm.js";
+import { handleMemoryListTyped, handleMemoryAddTyped, handleMemoryDeleteTyped } from "../handlers/memory.js";
 
 // Re-export types for backward compatibility
 export type { BridgeServerOptions, BridgeServerEventMap, TypedMessage, JsonRpcRequest, SessionState };
@@ -135,6 +137,7 @@ export class BridgeServer extends EventEmitter<BridgeServerEventMap> {
     // Build HandlerRegistry with all typed message handlers
     this.handlerRegistry = new Map([
       ["CHAT", async (ws, clientId, msg, ctx) => this.chatHandler.handle(ws, clientId, msg)],
+      ["CHAT_STREAM", handleChatStream],
       ["BASH", handleBash],
       ["FILE_EDIT", handleFileEdit],
       ["A2A_REQUEST", handleA2aRequest],
@@ -153,6 +156,9 @@ export class BridgeServer extends EventEmitter<BridgeServerEventMap> {
       ["CLOUD_STATUS", handleCloudStatus],
       ["CLOUD_SUBMIT_TASK", handleCloudSubmitTask],
       ["CLOUD_TASK_RESULT", handleCloudTaskResult],
+      ["MEMORY_LIST", handleMemoryListTyped],
+      ["MEMORY_ADD", handleMemoryAddTyped],
+      ["MEMORY_DELETE", handleMemoryDeleteTyped],
     ]);
 
     // ChatHandler needs broadcast and moduleManager
@@ -169,6 +175,7 @@ export class BridgeServer extends EventEmitter<BridgeServerEventMap> {
       ...(options.cloudAdapters !== undefined ? { cloudAdapters: options.cloudAdapters } : {}),
       ...(options.brain        !== undefined ? { brain:        options.brain        } : {}),
       ...(options.fleetKey     !== undefined ? { fleetKey:     options.fleetKey     } : {}),
+      ...(options.conversationMemory !== undefined ? { conversationMemory: options.conversationMemory } : {}),
     });
 
     // Build graph asynchronously (non-blocking)
@@ -266,6 +273,7 @@ export class BridgeServer extends EventEmitter<BridgeServerEventMap> {
       bridge: this.options.bridge,
       settingsManager: this.settingsManager,
       analytics: this.options.analytics,
+      llmRouter: this.options.llmRouter,
       getModuleManager: () => {
         if (!moduleManagerRef.current) {
           moduleManagerRef.current = new ModuleManager(this.options.repoRoot);
