@@ -265,6 +265,7 @@ export class BridgeServer extends EventEmitter<BridgeServerEventMap> {
       repoGraph,
       bridge: this.options.bridge,
       settingsManager: this.settingsManager,
+      analytics: this.options.analytics,
       getModuleManager: () => {
         if (!moduleManagerRef.current) {
           moduleManagerRef.current = new ModuleManager(this.options.repoRoot);

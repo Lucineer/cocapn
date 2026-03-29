@@ -19,6 +19,7 @@ import type { SkillDecisionTree } from "../skills/decision-tree.js";
 import type { RepoGraph } from "../graph/index.js";
 import type { HandoffProcessor } from "../handoff/processor.js";
 import type { SettingsManager } from "../settings/index.js";
+import type { Analytics } from "../analytics/index.js";
 
 // Forward declaration for Bridge to avoid circular dependency
 export interface BridgeLike {
@@ -86,6 +87,10 @@ export interface BridgeServerOptions {
   handoffProcessor: HandoffProcessor | undefined;
   /** Bridge instance — provides access to assembly and other bridge-level data */
   bridge?: BridgeLike;
+  /** Settings manager — manages bridge settings */
+  settingsManager?: SettingsManager;
+  /** Analytics — tracks usage, metrics, and exports */
+  analytics?: Analytics;
 }
 
 // ─── Event map ───────────────────────────────────────────────────────────────
