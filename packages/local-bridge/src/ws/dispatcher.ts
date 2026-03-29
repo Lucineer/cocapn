@@ -118,7 +118,7 @@ async function dispatchRpc(
 ): Promise<void> {
   const { method, params, id } = req;
 
-  if (method.startsWith("bridge/")) {
+  if (method.startsWith("bridge/") || method.startsWith("skill/") || method.startsWith("llm/") || method.startsWith("memory/") || method.startsWith("knowledge/") || method.startsWith("settings/") || method.startsWith("webhook/") || method.startsWith("graph/") || method.startsWith("tree/")) {
     const result = await handleBridgeMethod(method, params, ctx);
     ctx.sender.result(ws, id, result);
     return;
@@ -190,6 +190,40 @@ async function handleBridgeMethod(method: string, params: unknown, ctx: HandlerC
         return { error: "Token tracker not available" };
       }
       return ctx.tokenTracker.findWaste();
+    }
+
+    case "llm/models": {
+      if (!ctx.llmRouter) {
+        return { error: "LLM not configured" };
+      }
+      return {
+        models: ctx.llmRouter.getAvailableModels(),
+        defaultModel: undefined,
+      };
+    }
+
+    case "llm/chat": {
+      if (!ctx.llmRouter) {
+        return { error: "LLM not configured" };
+      }
+      const messages = p.messages as Array<{ role: string; content: string }> | undefined;
+      const model = p.model as string | undefined;
+      const systemPrompt = p.systemPrompt as string | undefined;
+      if (!messages || !Array.isArray(messages)) {
+        return { error: "Missing messages array" };
+      }
+      return ctx.llmRouter.chat(messages, { model, systemPrompt });
+    }
+
+    case "llm/cost": {
+      if (!ctx.llmRouter) {
+        return { error: "LLM not configured" };
+      }
+      return {
+        totalCost: ctx.llmRouter.getTotalCost(),
+        byProvider: ctx.llmRouter.getCostByProvider(),
+        records: ctx.llmRouter.getCostRecords().slice(-50),
+      };
     }
 
     case "skill/list": {

@@ -15,13 +15,16 @@ import { AgentSpawner } from '../../src/agents/spawner.js';
 import { AgentRegistry } from '../../src/agents/registry.js';
 import { AgentRouter } from '../../src/agents/router.js';
 import { GitSync } from '../../src/git/sync.js';
-import { DEFAULT_CONFIG, type BridgeConfig } from '../../src/config/types.js';
+import { Brain } from '../../src/brain/index.js';
+import { ConversationMemory } from '../../src/brain/conversation-memory.js';
 import { SkillLoader } from '../../src/skills/loader.js';
+import { SkillDecisionTree } from '../../src/skills/decision-tree.js';
 import { ExperimentManager } from '../../src/tree-search/manager.js';
+import { DEFAULT_CONFIG, type BridgeConfig } from '../../src/config/types.js';
 
 // Port management for parallel test execution
 const BASE_PORT = 30000;
-let portOffset = 0;
+let portOffset = Math.floor(Math.random() * 10000);
 
 export function getNextPort(): number {
   return BASE_PORT + portOffset++;
@@ -105,6 +108,12 @@ export async function createTestRepo(options: TestRepoOptions = {}): Promise<str
   writeFileSync(
     join(repoDir, 'README.md'),
     '# Test Repository\n\nThis is a test repository for E2E testing.\n'
+  );
+
+  // Ignore transient graph database files to avoid race conditions with git add
+  writeFileSync(
+    join(repoDir, '.gitignore'),
+    '.cocapn/graph.db*\nnode_modules/\n',
   );
 
   // Initial commit
@@ -505,4 +514,134 @@ export async function assertBridgeStatus(ws: WebSocket, expectedPort: number): P
   if (typeof response.result.agentCount !== 'number') {
     throw new Error(`Invalid agent count: ${response.result.agentCount}`);
   }
+}
+
+// ─── Extended test bridge with optional services ──────────────────────────────
+
+export interface TestBridgeWithServices extends TestBridge {
+  brain?: Brain;
+  skillLoader?: SkillLoader;
+  conversationMemory?: ConversationMemory;
+  decisionTree?: SkillDecisionTree;
+}
+
+/**
+ * Stop a test bridge without deleting the repo directory.
+ * Use this when you need to reuse the repo for another bridge instance.
+ */
+export async function stopBridgeNoCleanup(bridge: TestBridge): Promise<void> {
+  bridge.sync.stopTimers();
+  await bridge.server.stop();
+}
+
+/**
+ * Create a test bridge with Brain and ConversationMemory wired in.
+ * All MEMORY_ADD / MEMORY_LIST typed messages will work against real on-disk storage.
+ *
+ * @param options.repoDir - If provided, reuse this directory instead of creating a new one.
+ */
+export async function createTestBridgeWithBrain(options: {
+  port?: number;
+  skipAuth?: boolean;
+  repoDir?: string;
+} = {}): Promise<TestBridgeWithServices> {
+  const port = options.port ?? getNextPort();
+  let repoDir: string;
+
+  if (options.repoDir) {
+    repoDir = options.repoDir;
+  } else {
+    repoDir = await createTestRepo({ hasPackageJson: true, hasSrcDir: true, hasTests: true });
+    createCocapnConfig(repoDir);
+  }
+
+  // Config paths must match where createCocapnConfig actually writes files
+  const config: BridgeConfig = {
+    ...DEFAULT_CONFIG,
+    soul: 'cocapn/soul.md',
+    memory: {
+      ...DEFAULT_CONFIG.memory,
+      facts: 'cocapn/memory/facts.json',
+    },
+    config: { ...DEFAULT_CONFIG.config, port },
+  };
+
+  const sync = new GitSync(repoDir, config);
+  const spawner = new AgentSpawner();
+  const registry = new AgentRegistry();
+  const router = new AgentRouter(
+    { rules: [], strategy: 'first-match', defaultAgent: undefined, fallbackAgent: undefined },
+    registry,
+    spawner,
+  );
+
+  const brain = new Brain(repoDir, config, sync);
+  const conversationMemory = new ConversationMemory(brain);
+
+  const server = new BridgeServer({
+    config, router, spawner, sync,
+    repoRoot: repoDir,
+    skipAuth: options.skipAuth ?? true,
+    brain,
+    conversationMemory,
+  });
+
+  return { server, sync, spawner, registry, router, config, repoDir, port, brain, conversationMemory };
+}
+
+/**
+ * Create a test bridge with SkillLoader and SkillDecisionTree wired in.
+ * All skill/* JSON-RPC methods will work against real skill registrations.
+ *
+ * @param options.skillFiles - Map of file path (relative to repo) to skill JSON objects.
+ *   Each file is written to disk and registered with the SkillLoader.
+ */
+export async function createTestBridgeWithSkills(options: {
+  port?: number;
+  skipAuth?: boolean;
+  skillFiles?: Record<string, Record<string, unknown>>;
+} = {}): Promise<TestBridgeWithServices> {
+  const port = options.port ?? getNextPort();
+  const repoDir = await createTestRepo({ hasPackageJson: true, hasSrcDir: true, hasTests: true });
+  createCocapnConfig(repoDir);
+
+  const config: BridgeConfig = {
+    ...DEFAULT_CONFIG,
+    config: { ...DEFAULT_CONFIG.config, port },
+  };
+
+  const sync = new GitSync(repoDir, config);
+  const spawner = new AgentSpawner();
+  const registry = new AgentRegistry();
+  const router = new AgentRouter(
+    { rules: [], strategy: 'first-match', defaultAgent: undefined, fallbackAgent: undefined },
+    registry,
+    spawner,
+  );
+
+  const skillLoader = new SkillLoader({ skillPaths: [] });
+  const decisionTree = new SkillDecisionTree();
+
+  // Register skill files on disk and in the loader
+  if (options.skillFiles) {
+    for (const [filePath, skillJson] of Object.entries(options.skillFiles)) {
+      const fullPath = join(repoDir, filePath);
+      const dir = join(fullPath, '..');
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      writeFileSync(fullPath, JSON.stringify(skillJson));
+      await skillLoader.register(fullPath);
+    }
+  }
+
+  const server = new BridgeServer({
+    config, router, spawner, sync,
+    repoRoot: repoDir,
+    skipAuth: options.skipAuth ?? true,
+    skillLoader,
+    decisionTree,
+  });
+
+  return { server, sync, spawner, registry, router, config, repoDir, port, skillLoader, decisionTree };
 }
