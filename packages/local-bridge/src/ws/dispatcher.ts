@@ -1,0 +1,277 @@
+/**
+ * Dispatcher — parses incoming WebSocket frames and routes them.
+ *
+ * Two protocols coexist on the same WebSocket:
+ *
+ *   1. JSON-RPC 2.0  — discriminated by { jsonrpc: "2.0" }
+ *      Methods: bridge/*, mcp/<agentId>/*, module/*, a2a/*
+ *
+ *   2. Typed messages — discriminated by { type: "CHAT" | "BASH" | ... }
+ *      Routed to individual handler functions.
+ *
+ * The dispatcher owns the connection-level message listener and
+ * the close/error listeners. It delegates all business logic to handlers.
+ */
+
+import { WebSocket, type RawData } from "ws";
+import type { TypedMessage, JsonRpcRequest } from "./types.js";
+import type { HandlerContext, TypedHandler } from "../handlers/types.js";
+
+/** Registry mapping typed message types to handler functions. */
+export type HandlerRegistry = Map<string, TypedHandler>;
+
+/**
+ * Wire up message/close/error listeners on a connected WebSocket.
+ *
+ * Called once per connection after authentication succeeds.
+ * Sends the initial bridge status frame, then listens for messages.
+ */
+export function attachDispatcher(
+  ws: WebSocket,
+  clientId: string,
+  handlers: HandlerRegistry,
+  ctx: HandlerContext,
+): void {
+  console.info(`[bridge] Client connected: ${clientId}`);
+
+  ws.on("message", (data: RawData) => {
+    const raw = data.toString();
+    let msg: Record<string, unknown>;
+    try {
+      msg = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      ctx.sender.error(ws, null, -32700, "Parse error");
+      return;
+    }
+
+    // Route by protocol discriminant
+    if (typeof msg["type"] === "string") {
+      dispatchTyped(ws, clientId, msg as unknown as TypedMessage, handlers, ctx).catch(
+        (err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          ctx.sender.typed(ws, {
+            type: `${(msg as TypedMessage).type}_ERROR`,
+            id: (msg as TypedMessage).id,
+            error: message,
+          });
+        }
+      );
+    } else {
+      const rpc = msg as unknown as JsonRpcRequest;
+      dispatchRpc(ws, rpc, ctx).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        const code =
+          err !== null &&
+          typeof err === "object" &&
+          "code" in err &&
+          typeof (err as { code: unknown }).code === "number"
+            ? (err as { code: number }).code
+            : -32603;
+        ctx.sender.error(ws, rpc.id, code, message);
+      });
+    }
+  });
+
+  ws.on("close", () => {
+    // Clean up any agent sessions owned by this client
+    ctx.spawner.detachSession(clientId).catch(() => undefined);
+    console.info(`[bridge] Client disconnected: ${clientId}`);
+  });
+
+  ws.on("error", (err: Error) => {
+    console.error(`[bridge] Client ${clientId} error:`, err);
+  });
+}
+
+/**
+ * Dispatch a typed message to its registered handler.
+ */
+async function dispatchTyped(
+  ws: WebSocket,
+  clientId: string,
+  msg: TypedMessage,
+  handlers: HandlerRegistry,
+  ctx: HandlerContext,
+): Promise<void> {
+  const handler = handlers.get(msg.type);
+  if (!handler) {
+    ctx.sender.typed(ws, {
+      type: "ERROR",
+      id: msg.id,
+      error: `Unknown message type: ${msg.type}`,
+    });
+    return;
+  }
+
+  await handler(ws, clientId, msg, ctx);
+}
+
+/**
+ * Dispatch a JSON-RPC request to the appropriate bridge/mcp/module/a2a method.
+ *
+ * Pure routing logic — all state access goes through ctx.
+ */
+async function dispatchRpc(
+  ws: WebSocket,
+  req: JsonRpcRequest,
+  ctx: HandlerContext,
+): Promise<void> {
+  const { method, params, id } = req;
+
+  if (method.startsWith("bridge/")) {
+    const result = await handleBridgeMethod(method, ctx);
+    ctx.sender.result(ws, id, result);
+    return;
+  }
+
+  if (method.startsWith("module/")) {
+    const result = await handleModuleMethod(ws, method, params, ctx);
+    ctx.sender.result(ws, id, result);
+    return;
+  }
+
+  if (method.startsWith("mcp/")) {
+    const result = await handleMcpMethod(method, params, ctx);
+    ctx.sender.result(ws, id, result);
+    return;
+  }
+
+  if (method.startsWith("a2a/")) {
+    const result = await handleA2aMethod(method, params, ctx);
+    ctx.sender.result(ws, id, result);
+    return;
+  }
+
+  ctx.sender.error(ws, id, -32601, `Method not found: ${method}`);
+}
+
+async function handleBridgeMethod(method: string, ctx: HandlerContext): Promise<unknown> {
+  switch (method) {
+    case "bridge/status":
+      return getBridgeStatus(ctx);
+
+    case "bridge/agents":
+      return ctx.spawner.getAll().map((a) => ({
+        id: a.definition.id,
+        capabilities: a.definition.capabilities,
+        startedAt: a.startedAt.toISOString(),
+      }));
+
+    case "bridge/sessions":
+      // Sessions are managed by BridgeServer, not accessible via HandlerContext
+      // Return empty array for now — this would need to be added to HandlerContext
+      return [];
+
+    case "bridge/sync":
+      await ctx.sync.commit("[cocapn] manual sync");
+      return { ok: true };
+
+    default:
+      throw Object.assign(new Error(`Unknown bridge method: ${method}`), { code: -32601 });
+  }
+}
+
+async function handleMcpMethod(method: string, params: unknown, ctx: HandlerContext): Promise<unknown> {
+  const parts = method.split("/");
+  const agentId = parts[1];
+  const mcpMethod = parts.slice(2).join("/");
+
+  if (!agentId || !mcpMethod) {
+    throw new Error(`Invalid MCP method path: ${method}`);
+  }
+
+  const agent = ctx.spawner.get(agentId);
+  if (!agent) {
+    throw new Error(`Agent not running: ${agentId}`);
+  }
+
+  switch (mcpMethod) {
+    case "tools/list":
+      return agent.client.listTools();
+    case "tools/call":
+      return agent.client.callTool(params as Parameters<typeof agent.client.callTool>[0]);
+    case "resources/list":
+      return agent.client.listResources();
+    case "resources/read":
+      return agent.client.readResource((params as { uri: string }).uri);
+    default:
+      throw new Error(`Unsupported MCP method: ${mcpMethod}`);
+  }
+}
+
+async function handleModuleMethod(
+  ws: WebSocket,
+  method: string,
+  params: unknown,
+  ctx: HandlerContext,
+): Promise<unknown> {
+  const manager = ctx.getModuleManager();
+  const p = (params ?? {}) as Record<string, unknown>;
+
+  switch (method) {
+    case "module/list":
+      return manager.list();
+
+    case "module/install": {
+      const gitUrl = p["gitUrl"] as string | undefined;
+      if (!gitUrl) throw new Error("Missing gitUrl");
+      const mod = await manager.add(gitUrl, (line, stream) => {
+        ctx.sender.typed(ws, { type: "MODULE_PROGRESS", id: "rpc", line, stream });
+      });
+      // Broadcast updated module list
+      ctx.broadcast({ type: "MODULE_LIST_UPDATE", modules: manager.list() });
+      return mod;
+    }
+
+    case "module/remove": {
+      const name = p["name"] as string | undefined;
+      if (!name) throw new Error("Missing name");
+      await manager.remove(name);
+      ctx.broadcast({ type: "MODULE_LIST_UPDATE", modules: manager.list() });
+      return { ok: true };
+    }
+
+    case "module/update": {
+      const name = p["name"] as string | undefined;
+      if (!name) throw new Error("Missing name");
+      const updated = await manager.update(name);
+      ctx.broadcast({ type: "MODULE_LIST_UPDATE", modules: manager.list() });
+      return updated;
+    }
+
+    case "module/enable": {
+      const name = p["name"] as string | undefined;
+      if (!name) throw new Error("Missing name");
+      await manager.enable(name);
+      return { ok: true };
+    }
+
+    case "module/disable": {
+      const name = p["name"] as string | undefined;
+      if (!name) throw new Error("Missing name");
+      await manager.disable(name);
+      return { ok: true };
+    }
+
+    default:
+      throw Object.assign(new Error(`Unknown module method: ${method}`), { code: -32601 });
+  }
+}
+
+async function handleA2aMethod(method: string, params: unknown, ctx: HandlerContext): Promise<unknown> {
+  const agentDef = await ctx.router.resolveAndEnsureRunning(JSON.stringify(params));
+  if (!agentDef) throw new Error("No agent available for this task");
+  return { routed: true, agent: agentDef.definition.id, source: agentDef.source, method };
+}
+
+function getBridgeStatus(ctx: HandlerContext): Record<string, unknown> {
+  return {
+    version: "0.1.0",
+    mode: ctx.config.config.mode,
+    port: ctx.config.config.port,
+    agentCount: ctx.spawner.getAll().length,
+    // sessionCount would need to be added to HandlerContext if needed
+    sessionCount: 0,
+    uptime: process.uptime(),
+  };
+}

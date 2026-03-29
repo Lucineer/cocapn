@@ -5,7 +5,7 @@
  * directly. Also makes testing easier — inject a mock Sender.
  */
 
-import type { WebSocket, WebSocketServer } from "ws";
+import { WebSocket, type WebSocketServer } from "ws";
 import type { JsonRpcRequest } from "./types.js";
 
 export interface Sender {
