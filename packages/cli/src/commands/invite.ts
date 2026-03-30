@@ -21,7 +21,7 @@ import {
 } from "fs";
 import { join } from "path";
 import { randomBytes } from "crypto";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 
 // ─── ANSI colors ────────────────────────────────────────────────────────────
 
@@ -141,10 +141,11 @@ export function createInvite(
 
   // Detect public repo URL if available
   try {
-    const remote = execSync("git remote get-url origin 2>/dev/null || true", {
+    const remote = execFileSync("git", ["remote", "get-url", "origin"], {
       cwd: repoRoot,
       encoding: "utf-8",
       timeout: 5000,
+      stdio: ["pipe", "pipe", "pipe"],
     }).trim();
     if (remote) {
       invite.publicRepo = remote;
@@ -232,7 +233,7 @@ export function acceptInvite(
   const cloneDir = targetDir ?? code;
 
   // Clone the public repo
-  execSync(`git clone "${invite.publicRepo}" "${cloneDir}"`, {
+  execFileSync("git", ["clone", invite.publicRepo, cloneDir], {
     cwd: repoRoot,
     stdio: "pipe",
     timeout: 60000,

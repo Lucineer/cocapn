@@ -6,8 +6,8 @@
 
 import { Command } from "commander";
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, statSync, mkdirSync, readSync } from "fs";
-import { join, resolve } from "path";
-import { execSync } from "child_process";
+import { join, resolve, basename } from "path";
+import { execSync, execFileSync } from "child_process";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -71,7 +71,31 @@ export function ensureWikiDir(repoRoot: string): string {
 }
 
 function slugToPath(wikiDir: string, slug: string): string {
-  return join(wikiDir, `${slug.endsWith(".md") ? slug : `${slug}.md`}`);
+  const safeSlug = validateSlug(slug);
+  return join(wikiDir, `${safeSlug.endsWith(".md") ? safeSlug : `${safeSlug}.md`}`);
+}
+
+/** Validate a wiki slug — reject path traversal and shell metacharacters. */
+function validateSlug(slug: string): string {
+  // Reject null bytes
+  if (slug.includes("\x00")) {
+    throw new Error(`Invalid wiki slug: contains null byte`);
+  }
+  // Reject path traversal
+  if (slug.includes("..") || slug.includes("/") || slug.includes("\\")) {
+    throw new Error(`Invalid wiki slug: "${slug}" — path separators and ".." are not allowed`);
+  }
+  // Reject absolute paths
+  if (slug.startsWith("/")) {
+    throw new Error(`Invalid wiki slug: "${slug}" — absolute paths are not allowed`);
+  }
+  // Only allow safe filename characters
+  if (!/^[a-zA-Z0-9._-]+$/.test(slug)) {
+    throw new Error(
+      `Invalid wiki slug: "${slug}" — may only contain letters, digits, ., -, _`
+    );
+  }
+  return slug;
 }
 
 function formatDate(iso: string): string {
@@ -105,7 +129,7 @@ function truncate(s: string, max: number): string {
 
 function getGitDate(filePath: string): string {
   try {
-    return execSync(`git log -1 --format=%aI -- "${filePath}"`, { encoding: "utf-8" }).trim();
+    return execFileSync("git", ["log", "-1", "--format=%aI", "--", filePath], { encoding: "utf-8" }).trim();
   } catch {
     return "";
   }
@@ -240,7 +264,7 @@ function editAction(repoRoot: string, slug: string): void {
 
   const editor = process.env.EDITOR || "nano";
   try {
-    execSync(`${editor} "${path}"`, { stdio: "inherit" });
+    execFileSync(editor, [path], { stdio: "inherit" });
   } catch {
     console.log(red(`Failed to open editor. Set $EDITOR or ensure nano is installed.`));
     process.exit(1);
@@ -248,8 +272,8 @@ function editAction(repoRoot: string, slug: string): void {
 
   // Auto-commit
   try {
-    execSync(`git add "${path}"`, { cwd: repoRoot, stdio: "pipe" });
-    execSync(`git commit -m "wiki: edit ${slug}"`, { cwd: repoRoot, stdio: "pipe" });
+    execFileSync("git", ["add", path], { cwd: repoRoot, stdio: "pipe" });
+    execFileSync("git", ["commit", "-m", `wiki: edit ${validateSlug(slug)}`], { cwd: repoRoot, stdio: "pipe" });
     console.log(green(`\u2713 Saved and committed: ${slug}`));
   } catch {
     console.log(yellow(`Saved ${slug} (no changes to commit)`));
@@ -270,7 +294,7 @@ function newAction(repoRoot: string, slug: string): void {
 
   const editor = process.env.EDITOR || "nano";
   try {
-    execSync(`${editor} "${path}"`, { stdio: "inherit" });
+    execFileSync(editor, [path], { stdio: "inherit" });
   } catch {
     console.log(red(`Failed to open editor. Set $EDITOR or ensure nano is installed.`));
     process.exit(1);
@@ -278,8 +302,8 @@ function newAction(repoRoot: string, slug: string): void {
 
   // Auto-commit
   try {
-    execSync(`git add "${path}"`, { cwd: repoRoot, stdio: "pipe" });
-    execSync(`git commit -m "wiki: new ${slug}"`, { cwd: repoRoot, stdio: "pipe" });
+    execFileSync("git", ["add", path], { cwd: repoRoot, stdio: "pipe" });
+    execFileSync("git", ["commit", "-m", `wiki: new ${validateSlug(slug)}`], { cwd: repoRoot, stdio: "pipe" });
     console.log(green(`\u2713 Created and committed: ${slug}`));
   } catch {
     console.log(yellow(`Created ${slug}`));
@@ -354,8 +378,8 @@ function deleteAction(repoRoot: string, slug: string): void {
 
   // Auto-commit
   try {
-    execSync(`git add "${path}"`, { cwd: repoRoot, stdio: "pipe" });
-    execSync(`git commit -m "wiki: delete ${slug}"`, { cwd: repoRoot, stdio: "pipe" });
+    execFileSync("git", ["add", path], { cwd: repoRoot, stdio: "pipe" });
+    execFileSync("git", ["commit", "-m", `wiki: delete ${validateSlug(slug)}`], { cwd: repoRoot, stdio: "pipe" });
     console.log(green(`\u2713 Committed deletion: ${slug}`));
   } catch {
     // not in a git repo, or no changes

@@ -113,9 +113,23 @@ export class WebhookReceiver {
   ): Promise<void> {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
 
-    // Set CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    // Set CORS headers — restrictive: only allow known webhook senders
+    const requestOrigin = req.headers.origin;
+    if (requestOrigin) {
+      // Webhook receivers only accept POST from known platforms
+      const allowedOrigins = [
+        'https://github.com',
+        'https://api.github.com',
+        'https://hooks.slack.com',
+        'https://discord.com',
+        'https://discord.com/api',
+      ];
+      if (allowedOrigins.includes(requestOrigin)) {
+        res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+        res.setHeader('Vary', 'Origin');
+      }
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Webhook-Signature, X-Hub-Signature, X-Hub-Signature-256, X-Slack-Signature, X-Slack-Request-Timestamp');
 
     if (req.method === 'OPTIONS') {

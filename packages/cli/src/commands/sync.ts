@@ -10,7 +10,7 @@
  */
 
 import { Command } from "commander";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -66,7 +66,9 @@ export interface SyncResult {
 
 function git(cwd: string, args: string): string {
   try {
-    return execSync(`git ${args}`, { cwd, encoding: "utf-8", timeout: 30_000 }).trim();
+    // Split args safely for execFileSync — quoted segments stay together
+    const argList = splitArgs(args);
+    return execFileSync("git", argList, { cwd, encoding: "utf-8", timeout: 30_000 }).trim();
   } catch {
     return "";
   }
@@ -74,11 +76,43 @@ function git(cwd: string, args: string): string {
 
 function gitSafe(cwd: string, args: string): { ok: true; output: string } | { ok: false; error: string } {
   try {
-    const output = execSync(`git ${args}`, { cwd, encoding: "utf-8", timeout: 30_000 }).trim();
+    const argList = splitArgs(args);
+    const output = execFileSync("git", argList, { cwd, encoding: "utf-8", timeout: 30_000 }).trim();
     return { ok: true, output };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/**
+ * Safely split a git argument string into an array.
+ * Handles double-quoted segments (e.g., `commit -m "my message"`).
+ * Unquoted segments are split on whitespace.
+ */
+function splitArgs(args: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuote = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const ch = args[i]!;
+    if (ch === '"') {
+      inQuote = !inQuote;
+      continue;
+    }
+    if (ch === " " && !inQuote) {
+      if (current.length > 0) {
+        result.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (current.length > 0) {
+    result.push(current);
+  }
+  return result;
 }
 
 /** Detect repo paths from current working directory or config. */
@@ -114,7 +148,7 @@ export function resolveRepoPaths(cwdOverride?: string): { privatePath: string | 
   let siblingPublic: string | null = null;
   if (isBrain) {
     try {
-      const dirs = execSync("ls ../", { cwd, encoding: "utf-8" }).trim().split("\n");
+      const dirs = execFileSync("ls", ["../"], { cwd, encoding: "utf-8" }).trim().split("\n");
       const publicDir = dirs.find((d) =>
         d.includes(".") && existsSync(join(cwd, "..", d, "cocapn.yml"))
       );

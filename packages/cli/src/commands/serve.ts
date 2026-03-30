@@ -214,14 +214,16 @@ export function createServeCommand(): Command {
 }
 
 function openBrowser(url: string): void {
-  const { exec } = require("child_process") as typeof import("child_process");
+  const { execFile } = require("child_process") as typeof import("child_process");
   const cmd = process.platform === "darwin"
     ? "open"
     : process.platform === "win32"
-      ? "start"
+      ? "cmd"
       : "xdg-open";
 
-  exec(`${cmd} "${url}"`, (err) => {
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+
+  execFile(cmd, args, (err) => {
     if (err) {
       console.log(`\n  Open this URL in your browser: ${cyan(url)}`);
     }

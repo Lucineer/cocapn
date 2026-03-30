@@ -8,9 +8,9 @@
  */
 
 import { Command } from "commander";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
-import { join } from "path";
+import { join, basename } from "path";
 
 // --- Color helpers ---
 
@@ -167,8 +167,12 @@ async function deployCloudflare(opts: CloudflareOptions): Promise<void> {
 
   // Deploy
   console.log(cyan("\u25b8 Deploying to Cloudflare Workers..."));
-  const envArgs = opts.env !== "production" ? `--env ${opts.env}` : "";
-  const output = execSafe(`npx wrangler deploy ${envArgs}`, {
+  validateEnvName(opts.env);
+  const wranglerArgs = ["wrangler", "deploy"];
+  if (opts.env !== "production") {
+    wranglerArgs.push("--env", opts.env);
+  }
+  const output = execSafe("npx " + wranglerArgs.join(" "), {
     cwd,
     verbose: opts.verbose,
   });
@@ -226,17 +230,24 @@ async function deployDocker(opts: DockerOptions): Promise<void> {
 
   // Build
   console.log(cyan("\u25b8 Building Docker image..."));
-  execSafe(`docker build -t ${opts.tag} .`, { cwd, verbose: opts.verbose });
+  validateTag(opts.tag);
+  execFileSync("docker", ["build", "-t", opts.tag, "."], {
+    cwd,
+    stdio: opts.verbose ? "inherit" : "pipe",
+    timeout: 300_000,
+  });
   console.log(green(`\u2713 Built image: ${opts.tag}`));
 
-  // Resolve brain path to absolute
+  // Resolve brain path to absolute and validate
   const brainPath = resolvePath(opts.brain);
 
   // Run
   console.log(cyan("\u25b8 Starting container..."));
-  const runOutput = execSafe(
-    `docker run -d -p ${opts.port}:3100 -v ${brainPath}:/app/brain ${opts.tag}`,
-    { cwd, verbose: opts.verbose }
+  const portNum = validatePort(opts.port);
+  const runOutput = execFileSync(
+    "docker",
+    ["run", "-d", "-p", `${portNum}:3100`, "-v", `${brainPath}:/app/brain`, opts.tag],
+    { cwd, encoding: "utf-8", timeout: 30_000 }
   );
 
   const containerId = runOutput.trim().split("\n").pop()?.trim() || "unknown";
@@ -334,6 +345,37 @@ async function checkStatus(): Promise<void> {
     console.log(`   ${cyan("cocapn deploy cloudflare")} — Deploy to Workers`);
     console.log(`   ${cyan("cocapn deploy docker")}     — Run via Docker`);
     console.log(`   ${cyan("cocapn start")}            — Start local bridge`);
+  }
+}
+
+// --- Input validation ---
+
+/** Validate that a Docker image tag contains only safe characters. */
+function validateTag(tag: string): void {
+  // Docker tags: lowercase letters, digits, ., -, _, /
+  // No shell metacharacters allowed
+  if (!/^[a-z0-9._:/-]+$/.test(tag)) {
+    throw new Error(
+      `Invalid image tag: "${tag}". Tags may only contain lowercase letters, digits, ., -, _, /`
+    );
+  }
+}
+
+/** Validate that a port number is a safe integer 1-65535. */
+function validatePort(port: string): number {
+  const n = parseInt(port, 10);
+  if (!Number.isFinite(n) || n < 1 || n > 65535) {
+    throw new Error(`Invalid port: "${port}". Must be 1-65535.`);
+  }
+  return n;
+}
+
+/** Validate that an environment name contains only safe characters. */
+function validateEnvName(env: string): void {
+  if (!/^[a-zA-Z0-9_-]+$/.test(env)) {
+    throw new Error(
+      `Invalid environment name: "${env}". May only contain letters, digits, -, _`
+    );
   }
 }
 

@@ -20,7 +20,7 @@ import {
   mkdirSync,
   rmdirSync,
 } from "fs";
-import { join, extname, basename } from "path";
+import { join, extname, basename, normalize, relative } from "path";
 import { homedir } from "os";
 import type { GitSync } from "../git/sync.js";
 import type { BridgeConfig } from "../config/types.js";
@@ -31,6 +31,43 @@ import { createHybridSearch, HybridSearch } from "./hybrid-search.js";
 import { MemoryManager, type MemoryEntry, type MemoryManagerOptions } from "./memory-manager.js";
 import { RepoLearner, type FileContext, type ModuleInfo, type ArchitecturalDecision } from "./repo-learner.js";
 import type { AgentMode } from "../publishing/mode-switcher.js";
+
+// ─── Path validation ──────────────────────────────────────────────────────────
+
+/**
+ * Validate that a relative file path does not escape its intended directory.
+ * Rejects null bytes, path traversal (..), absolute paths, and UNC paths.
+ * Returns the normalized relative path if safe, or throws.
+ */
+function validateRelativePath(filePath: string, context: string): string {
+  if (!filePath || filePath.includes("\x00")) {
+    throw new Error(`[${context}] Invalid path: null byte or empty`);
+  }
+  if (filePath.startsWith("/") || /^[A-Za-z]:/.test(filePath) || filePath.startsWith("\\\\")) {
+    throw new Error(`[${context}] Absolute path rejected: ${filePath}`);
+  }
+  const normalized = normalize(filePath);
+  const parts = normalized.split(/[/\\]/);
+  if (parts.some((p) => p === "..")) {
+    throw new Error(`[${context}] Path traversal rejected: ${filePath}`);
+  }
+  return normalized;
+}
+
+/**
+ * Resolve a user-supplied relative path under a base directory and verify
+ * the result stays within that base directory.
+ */
+function resolveWithin(baseDir: string, relativePath: string, context: string): string {
+  const safe = validateRelativePath(relativePath, context);
+  const fullPath = join(baseDir, safe);
+  const resolved = normalize(fullPath);
+  const base = normalize(baseDir);
+  if (!resolved.startsWith(base + "/") && resolved !== base) {
+    throw new Error(`[${context}] Path escapes base directory: ${relativePath}`);
+  }
+  return resolved;
+}
 
 // ─── Re-exports ─────────────────────────────────────────────────────────────────
 
@@ -351,7 +388,8 @@ export class Brain {
     if ((effectiveMode === "public" || effectiveMode === "a2a") && file.startsWith("private/")) {
       return null;
     }
-    const fullPath = join(this.repoRoot, "cocapn", "wiki", file);
+    const wikiDir = join(this.repoRoot, "cocapn", "wiki");
+    const fullPath = resolveWithin(wikiDir, file, "readWikiPage");
     if (!existsSync(fullPath)) return null;
     try {
       return readFileSync(fullPath, "utf8");
@@ -372,7 +410,7 @@ export class Brain {
       ensureDir(wikiDir);
 
       const name = destName ?? basename(sourcePath);
-      const destPath = join(wikiDir, name);
+      const destPath = resolveWithin(wikiDir, name, "addWikiPage");
       const content = readFileSync(sourcePath, "utf8");
       writeFileSync(destPath, content, "utf8");
       this.wikiIndex.add(name, content);

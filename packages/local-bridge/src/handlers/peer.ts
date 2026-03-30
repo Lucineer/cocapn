@@ -24,7 +24,18 @@ export async function handleHttpPeerRequest(
   ctx: HandlerContext,
 ): Promise<void> {
   res.setHeader("Content-Type", "application/json");
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // Restrictive CORS — only allow same-origin by default.
+  // Peer discovery (.well-known) allows cross-origin; data endpoints do not.
+  const requestOrigin = req.headers.origin;
+  if (requestOrigin) {
+    // Only echo back the origin if it matches a known cocapn tunnel domain pattern
+    const isLocalhost = requestOrigin.startsWith("http://localhost") || requestOrigin.startsWith("http://127.0.0.1");
+    const isTunnel = requestOrigin.includes(".trycloudflare.com") || requestOrigin.includes(".cfargotunnel.com") || requestOrigin.includes(".cocapn.io");
+    if (isLocalhost || isTunnel) {
+      res.setHeader("Access-Control-Allow-Origin", requestOrigin);
+      res.setHeader("Vary", "Origin");
+    }
+  }
 
   const url = req.url ?? "/";
   const { pathname, searchParams } = new URL(url, "http://localhost");
