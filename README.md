@@ -2,9 +2,9 @@
 
 # Cocapn
 
-### *Self-hosted AI agent with persistent memory.*
+### *Clone a repo. It's alive.*
 
-Run an AI agent locally. It remembers your context across sessions, ships to Cloudflare Workers, and coordinates with other agents. No cloud dependency, no vendor lock-in.
+The repository IS the agent. Not a runtime that works on repos — the repo itself is a living entity. Its code, AI, memory, wiki, frontend, and backend all grow together in Git. Two repos: private brain, public face. Clone it, it works. Deploy anywhere.
 
 [![CI](https://github.com/CedarBeach2019/cocapn/actions/workflows/ci.yml/badge.svg)](https://github.com/CedarBeach2019/cocapn/actions/workflows/ci.yml)
 [![npm version](https://badge.fury.io/js/cocapn.svg)](https://www.npmjs.com/package/cocapn)
@@ -12,102 +12,170 @@ Run an AI agent locally. It remembers your context across sessions, ships to Clo
 
 [Live Demo](https://cocapn-agent.magnus-digennaro.workers.dev) ·
 [Docs](https://docs.cocapn.app) ·
-[Contributing](CONTRIBUTING.md)
+[Architecture](docs/ARCHITECTURE.md)
 
 </div>
 
-## What is Cocapn?
+---
 
-Cocapn is a **self-hosted AI agent runtime** — not a code editor plugin, not a cloud service.
+## What It Is
 
-- Your agent runs **locally** (Node.js) with all memory stored in **Git repos**
-- It remembers facts, preferences, and personality across every session
-- Optional Cloudflare Workers deployment for cloud features
-- Multiple agents can coordinate via the A2A fleet protocol
+Cocapn is an open-source agent framework where **the repo is the agent**. Every repo you create with it is a self-contained AI entity — it remembers, learns, and grows. Git is the database. `soul.md` is the personality. The agent doesn't search your code — it *is* your code.
 
-**Quick start:**
+Two repos per agent: a **private brain** (facts, memory, personality, secrets) and a **public face** (website, skin, domain). Fork it, customize it, deploy it. MIT license, no vendor lock-in, fully self-hosted.
 
-```bash
-npx create-cocapn my-agent
-cd my-agent
-cocapn start
-```
-
-**From source:**
+## Quick Start
 
 ```bash
-git clone https://github.com/CedarBeach2019/cocapn.git
-cd cocapn && npm install && npm run build
-cd packages/cli && node bin/cocapn.js init ~/.cocapn
-node bin/cocapn.js start
+npm create cocapn
+# → Prompts for username, domain, template
+# → Creates private repo (alice-brain) + public repo (alice.makerlog.ai)
+# → Scaffolds soul.md, config, memory/, wiki/
+
+cd alice-brain
+cocapn secret set DEEPSEEK_API_KEY     # stored in keychain, never in git
+cocapn start --public ../alice.makerlog.ai
+
+# In another terminal:
+cd ../alice.makerlog.ai && npm run dev
+# → http://localhost:5173 — your agent is alive
 ```
 
-Open `localhost:3100`, chat, close it, restart — your agent remembers everything.
+Open the chat. Close it. Restart tomorrow. **Your agent remembers everything.**
 
 ![Cocapn Chat UI](docs/demo-screenshot.png)
 
-## Is It Real?
+## How It Works
 
-Yes. Here's the proof:
+```
+  ┌──────────────────────────┐       ┌──────────────────────────┐
+  │     PRIVATE REPO          │       │     PUBLIC REPO           │
+  │     (the brain)           │       │     (the face)            │
+  │                           │       │                           │
+  │  cocapn/                  │       │  cocapn.yml               │
+  │  ├── soul.md              │       │  index.html               │
+  │  ├── config.yml           │       │  src/        (Vite+React) │
+  │  ├── memory/              │       │  skin/       (theme)      │
+  │  │   ├── facts.json       │ sync  │  CNAME       (domain)     │
+  │  │   ├── memories.json    │──────▶│                           │
+  │  │   ├── procedures.json  │       │  Deploys to:              │
+  │  │   └── repo-understanding/      │  Cloudflare / Docker /    │
+  │  ├── wiki/                │       │  local / air-gapped       │
+  │  ├── skills/              │       │                           │
+  │  └── agents/              │       └──────────────────────────┘
+  │                           │
+  │  secrets/    (gitignored) │
+  └──────────────────────────┘
+```
 
-- **[Live instance](https://cocapn-agent.magnus-digennaro.workers.dev)** running on Cloudflare Workers
-- **129 test files** (unit + integration) across the monorepo
-- **[CI pipeline](https://github.com/CedarBeach2019/cocapn/actions/workflows/ci.yml)** testing Node 18, 20, 22 on every push
+### The Brain
 
-## How It Compares
+`soul.md` defines who the agent is. Edit this file, change the agent. Version-controlled personality.
 
-| | **Cocapn** | **Aider** | **Cline** | **Cursor** |
-|--|-----------|----------|----------|-----------|
-| Self-hosted | Yes | Yes | Yes (VS Code) | No (cloud) |
-| Persistent memory | Git-backed Brain | File-based | File-based | Session only |
-| Offline-first | Yes | Yes | Partial | No |
-| Fleet coordination | A2A protocol | None | None | None |
-| Plugin system | npm skills + sandbox | None | Extensions | Extensions |
-| Cloud deploy | Cloudflare Workers | None | None | Included |
-| Vendor lock-in | None (MIT) | Apache-2 | MIT | Proprietary |
+Memory is structured, not dumped:
 
-Cocapn is an **agent runtime**, not a coding assistant. It's built for agents that live, remember, and coordinate — not just autocomplete code.
+| Store | What it holds | Persistence |
+|-------|--------------|-------------|
+| `facts.json` | User properties, preferences | Explicit, never decays |
+| `memories.json` | Observations with confidence scores | Decay over time |
+| `procedures.json` | Learned multi-step workflows | Merged on repeat |
+| `relationships.json` | Entity-relation graph | Add-only |
+| `repo-understanding/` | Git-derived architectural knowledge | Re-derived from commits |
+
+### Four Modes
+
+| Mode | Trigger | Brain Access | When |
+|------|---------|-------------|------|
+| **Private** | Local WebSocket | Full brain + filesystem + git | You, the owner |
+| **Public** | HTTP to `/api/chat` | Facts only (no `private.*`) | Visitors to your site |
+| **Maintenance** | Cron / heartbeat | Full brain + git + npm | Agent maintains itself |
+| **Fleet** | A2A protocol message | Scoped by fleet policy | Other agents |
+
+### It Learns from Git
+
+Every commit teaches the agent. It reads `git log`, `git blame`, `git diff` and builds understanding — why decisions were made, what patterns exist, where the hotspots are. The agent isn't searching code. It's the senior maintainer who's been there since day one.
 
 ## Features
 
-- **Persistent Memory** — Git-backed Brain stores facts, procedures, and personality. Version-controlled, auditable, fully yours.
-- **Self-Assembly** — `cocapn start` detects your project and configures itself. No boilerplate.
-- **Plugin System** — Extend with npm packages. Skills run hot (in-process) or cold (sandboxed). Permissions are explicit.
-- **Fleet Protocol** — Multiple agents coordinate via A2A (Agent-to-Agent). Distribute tasks and share context.
-- **Zero Lock-in** — Data lives in Git repos on your machine. Cloud is optional.
+- **Git is the database** — memory is version-controlled, auditable, portable. No external DB required.
+- **Clone it, it works** — fork → add API key → run → live agent with a website. That's it.
+- **Multi-provider LLM** — DeepSeek, OpenAI, Anthropic, or local models (Ollama/llama.cpp). Swap without rewriting.
+- **Plugin system** — extend with npm packages. Skills run hot (in-process) or cold (sandboxed). Explicit permissions.
+- **Fleet protocol** — multiple agents coordinate via A2A. Distribute tasks, share context across repos.
+- **Privacy by design** — `private.*` facts never leave the brain repo. Publishing layer enforces the boundary.
+- **Offline-first** — runs locally. Cloud is optional enhancement, not requirement.
+- **Zero lock-in** — MIT license. Your data lives in Git repos on your machine. Take it anywhere.
 
-## Templates
+## Deployment
 
-| Template | Focus |
-|----------|-------|
-| `bare` | Minimal, start from scratch |
-| `dmlog` | TTRPG game console |
-| `makerlog` | Developers & manufacturers |
-| `studylog` | Education & research |
-| `businesslog` | Enterprise deployments |
-| `cloud-worker` | Cloudflare Workers only |
-| `web-app` | Full-stack web apps |
+Same codebase, four environments:
 
 ```bash
-cocapn init --template makerlog
+# Local (full power)
+cocapn start
+
+# Docker
+docker compose up
+
+# Cloudflare Workers
+cocapn deploy --env production
+
+# Air-gapped (no internet, local LLM only)
+AIR_GAPPED=1 cocapn start --llm local
 ```
+
+| Capability | Local | Docker | Workers | Air-Gapped |
+|-----------|-------|--------|---------|------------|
+| Git-backed memory | Yes | Yes | D1/KV fallback | Yes |
+| LLM chat | Yes | Yes | Yes | Local model |
+| File editing | Yes | Yes | No | Yes |
+| Git operations | Yes | Yes | No | Yes |
+| Vector search | Yes | Yes | No | Keyword only |
+| Fleet coordination | Yes | Yes | Yes | Yes |
+
+## Verticals
+
+Cocapn is the engine. Verticals are powered repos — themed, configured, ready to deploy:
+
+| Vertical | Domain | Focus |
+|----------|--------|-------|
+| [DMlog.ai](https://dmlog.ai) | TTRPG | Game console, campaign management, dice |
+| [Fishinglog.ai](https://fishinglog.ai) | Fishing | Commercial fleet + recreational angler |
+| [Deckboss.ai](https://deckboss.ai) | Maritime | Vessel management, crew coordination |
+
+More verticals: makerlog.ai, studylog.ai, businesslog.ai, activeledger.ai, playerlog.ai, reallog.ai. Every feature works on every domain. Templates are curated starting points.
+
+## Comparison
+
+| | **Cocapn** | **Claude Code** | **Cursor** | **Mem0** |
+|--|-----------|----------------|------------|----------|
+| Paradigm | Repo IS the agent | Agent edits repos | IDE plugin | Memory service |
+| Persistent memory | Git-backed brain | Session only | Session only | External service |
+| Offline-first | Yes | No | No | No |
+| Self-hosted | Yes | No | No | Optional |
+| Fleet coordination | A2A protocol | None | None | None |
+| Plugin system | npm + sandbox | None | Extensions | Integrations |
+| Vendor lock-in | None (MIT) | Proprietary | Proprietary | Managed service |
+| Version-controlled | Git (everything) | No | No | No |
+
+Cocapn isn't a coding assistant. It's an agent that *is* the repo — it remembers, grows, and has a public face. Clone it, deploy it, fork it.
 
 ## CLI
 
-| Command | What it does |
-|---------|-------------|
-| `cocapn init` | Initialize a project (detect stack, self-assemble) |
-| `cocapn start` | Start the local bridge |
-| `cocapn deploy` | Deploy to Cloudflare Workers |
-| `cocapn status` | Show bridge and agent status |
-| `cocapn plugin install` | Install a plugin from npm |
-| `cocapn skill load` | Load a skill into the bridge |
-| `cocapn template install` | Install a template |
-| `cocapn health` | Health check (local + cloud) |
+```bash
+cocapn init                # Create two-repo agent project
+cocapn start               # Start local bridge
+cocapn deploy              # Deploy public repo to Cloudflare
+cocapn status              # Bridge + agent status
+cocapn plugin install      # Install plugin from npm
+cocapn skill load          # Load skill into bridge
+cocapn secret set KEY      # Store secret in OS keychain
+cocapn health              # Health check (local + cloud)
+```
 
 ## Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, code style, and PR guidelines.
+Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, code style, and PR guidelines.
 
 ## License
 
