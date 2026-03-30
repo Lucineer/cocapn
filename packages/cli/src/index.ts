@@ -15,6 +15,11 @@
  *   cocapn graph               — Show knowledge graph stats
  *   cocapn tokens              — Show token usage stats
  *   cocapn health              — Health check
+ *   cocapn memory list         — List all memory entries
+ *   cocapn memory get <key>    — Get a specific entry
+ *   cocapn memory set <k> <v>  — Set a fact
+ *   cocapn memory delete <key> — Delete a fact
+ *   cocapn memory search <q>   — Search memory
  *   cocapn version             — Show version
  */
 
@@ -38,6 +43,7 @@ import { createPersonalityCommand } from "./commands/personality.js";
 import { createRunCommand } from "./commands/run.js";
 import { createTelemetryCommand } from "./commands/telemetry.js";
 import { createChatCommand } from "./commands/chat.js";
+import { createMemoryCommand } from "./commands/memory.js";
 
 const VERSION = "0.1.0";
 
@@ -55,6 +61,9 @@ export function createCLI(): Command {
   program.addCommand(createStartCommand());
   program.addCommand(createStatusCommand());
   program.addCommand(createChatCommand());
+
+  // Memory commands
+  program.addCommand(createMemoryCommand());
 
   // Deploy commands
   program.addCommand(createDeployCommand());
