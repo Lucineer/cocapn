@@ -47,6 +47,17 @@
  *   cocapn invite list         — List active invites
  *   cocapn invite revoke <code> — Revoke invite
  *   cocapn invite accept <code> — Accept invite
+ *   cocapn remote list         — List remote instances
+ *   cocapn remote add <name> <url> — Add remote instance
+ *   cocapn remote remove <name> — Remove remote
+ *   cocapn remote deploy <name> — Deploy to remote
+ *   cocapn remote status <name> — Check remote health
+ *   cocapn auth login           — Authenticate with cocapn.ai
+ *   cocapn auth logout          — Clear auth
+ *   cocapn auth status          — Show auth status
+ *   cocapn auth keys list       — Show configured keys (masked)
+ *   cocapn auth keys set <provider> <key> — Set API key
+ *   cocapn auth keys remove <provider>   — Remove API key
  *   cocapn version             — Show version
  */
 
@@ -81,6 +92,8 @@ import { createResetCommand } from "./commands/reset.js";
 import { createServeCommand } from "./commands/serve.js";
 import { createBackupCommand } from "./commands/backup.js";
 import { createInviteCommand } from "./commands/invite.js";
+import { createRemoteCommand } from "./commands/remote.js";
+import { createAuthCommand } from "./commands/auth.js";
 
 const VERSION = "0.1.0";
 
@@ -163,6 +176,12 @@ export function createCLI(): Command {
 
   // Invite command
   program.addCommand(createInviteCommand());
+
+  // Remote command
+  program.addCommand(createRemoteCommand());
+
+  // Auth command
+  program.addCommand(createAuthCommand());
 
   return program;
 }
