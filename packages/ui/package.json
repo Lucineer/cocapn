@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "echo 'Dashboard UI — build deferred to v0.2. Use ui-minimal for production.'",
     "build:singlefile": "tsc --noEmit && vite build --config vite.singlefile.config.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

@@ -44,6 +44,8 @@ node bin/cocapn.js start
 
 Open `localhost:3100`, chat, close it, restart — your agent remembers everything.
 
+![Cocapn Chat UI](docs/demo-screenshot.png)
+
 ## Is It Real?
 
 Yes. Here's the proof:
