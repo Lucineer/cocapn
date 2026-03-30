@@ -1,7 +1,7 @@
 {
   "name": "create-cocapn",
   "version": "0.1.0",
-  "description": "Zero-friction scaffolder for Cocapn agent instances",
+  "description": "Two-repo scaffolder for Cocapn agent instances",
   "type": "module",
   "bin": {
     "create-cocapn": "./bin/create-cocapn.js"

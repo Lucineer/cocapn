@@ -23,6 +23,8 @@ import type {
 import { DeepSeekProvider } from './deepseek.js';
 import { OpenAIProvider } from './openai.js';
 import { AnthropicProvider } from './anthropic.js';
+import { OllamaProvider } from './local/provider.js';
+import { LlamaCppProvider } from './local/provider.js';
 
 // ─── Cost table ($ per 1M tokens) ────────────────────────────────────────────
 
@@ -60,6 +62,8 @@ export interface LLMRouterConfig {
     deepseek?: { apiKey: string; baseUrl?: string };
     openai?: { apiKey: string; baseUrl?: string };
     anthropic?: { apiKey: string; baseUrl?: string };
+    ollama?: { endpoint?: string; timeout?: number };
+    'llama-cpp'?: { endpoint?: string; timeout?: number };
   };
   /** Default model to use when none specified */
   defaultModel?: string;
@@ -112,6 +116,18 @@ export class LLMRouter {
         timeout: config.timeout,
       }));
     }
+    if (config.providers.ollama) {
+      this.providers.push(new OllamaProvider({
+        endpoint: config.providers.ollama.endpoint,
+        timeout: config.providers.ollama.timeout ?? config.timeout,
+      }));
+    }
+    if (config.providers['llama-cpp']) {
+      this.providers.push(new LlamaCppProvider({
+        endpoint: config.providers['llama-cpp'].endpoint,
+        timeout: config.providers['llama-cpp'].timeout ?? config.timeout,
+      }));
+    }
 
     this.defaultModel = config.defaultModel ?? 'deepseek-chat';
     this.fallbackModels = config.fallbackModels ?? [];
@@ -150,6 +166,12 @@ export class LLMRouter {
           break;
         case 'anthropic':
           models.push('claude-sonnet-4-20250514', 'claude-haiku-4-5-20251001');
+          break;
+        case 'ollama':
+          models.push('llama3', 'mistral', 'codellama', 'phi3', 'deepseek-coder');
+          break;
+        case 'llama-cpp':
+          models.push('llama-cpp');
           break;
       }
     }

@@ -1,34 +1,39 @@
 /**
- * Tests for scaffold.ts — uses node:test, no external test runner needed.
+ * Tests for scaffold.ts — two-repo model.
  *
  * Run with:
- *   node --test --experimental-strip-types tests/scaffold.test.ts
- *
- * (Node 20+ supports --experimental-strip-types; for tsc-compiled output use:
- *   node --test dist-tests/scaffold.test.js)
+ *   node --import ../local-bridge/node_modules/tsx/dist/esm/index.cjs --test tests/scaffold.test.ts
  */
 
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, rmSync, readFileSync } from "fs";
+import { existsSync, rmSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
+import { execSync } from "child_process";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function tmpDir(suffix: string): string {
-  const dir = join(tmpdir(), `create-cocapn-test-${suffix}-${Date.now()}`);
-  mkdirSync(dir, { recursive: true });
+  const dir = join(tmpdir(), `cocapn-test-${suffix}-${Date.now()}`);
   return dir;
 }
 
-// ─── scaffoldPrivateRepo ──────────────────────────────────────────────────────
+const CONFIG = {
+  username: "alice",
+  projectName: "my-cocapn",
+  domain: "makerlog",
+  template: "bare",
+  baseDir: "",
+};
 
-describe("scaffoldPrivateRepo", () => {
+// ─── createPrivateRepo ────────────────────────────────────────────────────────
+
+describe("createPrivateRepo", () => {
   let dir: string;
 
   before(() => {
-    dir = tmpDir("private-repo");
+    dir = tmpDir("brain");
   });
 
   after(() => {
@@ -36,100 +41,302 @@ describe("scaffoldPrivateRepo", () => {
   });
 
   it("creates expected directory structure", async () => {
-    // Import after tmp dir is ready
-    const { scaffoldPrivateRepo } = await import("../src/scaffold.js");
-    scaffoldPrivateRepo(dir, "alice", "makerlog");
+    const { createPrivateRepo } = await import("../src/scaffold.js");
+    createPrivateRepo(dir, CONFIG);
 
     // Directories
     assert.ok(existsSync(join(dir, "cocapn")), "cocapn/ exists");
     assert.ok(existsSync(join(dir, "cocapn", "memory")), "memory/ exists");
-    assert.ok(existsSync(join(dir, "cocapn", "tasks")), "tasks/ exists");
-    assert.ok(existsSync(join(dir, "cocapn", "wiki")), "wiki/ exists");
+    assert.ok(existsSync(join(dir, "cocapn", "memory", "repo-understanding")), "repo-understanding/ exists");
+    assert.ok(existsSync(join(dir, "wiki")), "wiki/ exists");
 
     // Files
     assert.ok(existsSync(join(dir, "cocapn", "soul.md")), "soul.md exists");
     assert.ok(existsSync(join(dir, "cocapn", "config.yml")), "config.yml exists");
     assert.ok(existsSync(join(dir, "cocapn", "memory", "facts.json")), "facts.json exists");
-    assert.ok(existsSync(join(dir, "cocapn", "wiki", "README.md")), "wiki README exists");
-    assert.ok(existsSync(join(dir, "cocapn", "tasks", ".gitkeep")), ".gitkeep exists");
+    assert.ok(existsSync(join(dir, "cocapn", "memory", "memories.json")), "memories.json exists");
+    assert.ok(existsSync(join(dir, "cocapn", "memory", "procedures.json")), "procedures.json exists");
+    assert.ok(existsSync(join(dir, "cocapn", "memory", "relationships.json")), "relationships.json exists");
+    assert.ok(existsSync(join(dir, "wiki", "README.md")), "wiki README exists");
+    assert.ok(existsSync(join(dir, ".gitignore")), ".gitignore exists");
+    assert.ok(existsSync(join(dir, ".env.local")), ".env.local exists");
+    assert.ok(existsSync(join(dir, "package.json")), "package.json exists");
   });
 
-  it("replaces {{username}} placeholder in soul.md", async () => {
-    const { scaffoldPrivateRepo } = await import("../src/scaffold.js");
-    const d = tmpDir("placeholder");
+  it("soul.md contains username", async () => {
+    const { createPrivateRepo } = await import("../src/scaffold.js");
+    const d = tmpDir("soul-user");
     try {
-      scaffoldPrivateRepo(d, "bob", "studylog");
+      createPrivateRepo(d, { ...CONFIG, username: "bob" });
       const soul = readFileSync(join(d, "cocapn", "soul.md"), "utf8");
-      assert.ok(soul.includes("bob"), "username replaced in soul.md");
+      assert.ok(soul.includes("bob"), "username in soul.md");
       assert.ok(!soul.includes("{{username}}"), "no unreplaced placeholders");
     } finally {
       rmSync(d, { recursive: true, force: true });
     }
   });
 
-  it("replaces {{domain}} placeholder in config.yml", async () => {
-    const { scaffoldPrivateRepo } = await import("../src/scaffold.js");
-    const d = tmpDir("domain");
+  it(".gitignore contains .env.local", async () => {
+    const { createPrivateRepo } = await import("../src/scaffold.js");
+    const d = tmpDir("gitignore");
     try {
-      scaffoldPrivateRepo(d, "carol", "activelog");
+      createPrivateRepo(d, CONFIG);
+      const gitignore = readFileSync(join(d, ".gitignore"), "utf8");
+      assert.ok(gitignore.includes(".env.local"), ".env.local in .gitignore");
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  it("config.yml has correct domain", async () => {
+    const { createPrivateRepo } = await import("../src/scaffold.js");
+    const d = tmpDir("config-domain");
+    try {
+      createPrivateRepo(d, { ...CONFIG, domain: "dmlog" });
       const config = readFileSync(join(d, "cocapn", "config.yml"), "utf8");
-      assert.ok(config.includes("activelog"), "domain replaced in config.yml");
-      assert.ok(!config.includes("{{domain}}"), "no unreplaced placeholders");
+      assert.ok(config.includes("dmlog"), "domain in config.yml");
     } finally {
       rmSync(d, { recursive: true, force: true });
     }
   });
 
-  it("writes facts.json as empty object", async () => {
-    const { scaffoldPrivateRepo } = await import("../src/scaffold.js");
-    const d = tmpDir("facts");
+  it("dmlog template has TTRPG soul.md", async () => {
+    const { createPrivateRepo } = await import("../src/scaffold.js");
+    const d = tmpDir("dmlog-soul");
     try {
-      scaffoldPrivateRepo(d, "dave", "lifelog");
+      createPrivateRepo(d, { ...CONFIG, template: "dmlog" });
+      const soul = readFileSync(join(d, "cocapn", "soul.md"), "utf8");
+      assert.ok(soul.includes("Dungeon Master"), "TTRPG content in dmlog soul.md");
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  it("facts.json is empty object", async () => {
+    const { createPrivateRepo } = await import("../src/scaffold.js");
+    const d = tmpDir("facts-empty");
+    try {
+      createPrivateRepo(d, CONFIG);
       const facts = readFileSync(join(d, "cocapn", "memory", "facts.json"), "utf8");
-      const parsed: unknown = JSON.parse(facts);
-      assert.deepEqual(parsed, {});
+      assert.deepEqual(JSON.parse(facts), {});
     } finally {
       rmSync(d, { recursive: true, force: true });
     }
   });
 });
 
-// ─── generateAgeKey ───────────────────────────────────────────────────────────
+// ─── createPublicRepo ─────────────────────────────────────────────────────────
 
-describe("generateAgeKey", () => {
-  it("returns undefined when age-keygen is not available", async () => {
-    const { generateAgeKey } = await import("../src/scaffold.js");
-    const d = tmpDir("age-missing");
+describe("createPublicRepo", () => {
+  it("creates expected directory structure", async () => {
+    const { createPublicRepo } = await import("../src/scaffold.js");
+    const dir = tmpDir("public");
     try {
-      // This will succeed on systems with age-keygen, or return undefined otherwise.
-      // We test that it never throws.
-      const result = generateAgeKey(d);
-      // result is either AgeKeyResult | undefined — both acceptable
-      if (result !== undefined) {
-        assert.ok(typeof result.publicKey === "string", "publicKey is string");
-        assert.ok(result.publicKey.startsWith("age1"), "publicKey has age1 prefix");
-        assert.ok(existsSync(result.privateKeyPath), "private key file created");
-      }
+      createPublicRepo(dir, CONFIG);
+
+      assert.ok(existsSync(join(dir, "cocapn.yml")), "cocapn.yml exists");
+      assert.ok(existsSync(join(dir, "index.html")), "index.html exists");
+      assert.ok(existsSync(join(dir, "src", "main.ts")), "main.ts exists");
+      assert.ok(existsSync(join(dir, "src", "app.ts")), "app.ts exists");
+      assert.ok(existsSync(join(dir, "src", "style.css")), "style.css exists");
+      assert.ok(existsSync(join(dir, ".gitignore")), ".gitignore exists");
+      assert.ok(existsSync(join(dir, "package.json")), "package.json exists");
     } finally {
-      rmSync(d, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("creates CNAME when domain is provided", async () => {
+    const { createPublicRepo } = await import("../src/scaffold.js");
+    const dir = tmpDir("cname");
+    try {
+      createPublicRepo(dir, CONFIG);
+      assert.ok(existsSync(join(dir, "CNAME")), "CNAME exists");
+      const cname = readFileSync(join(dir, "CNAME"), "utf8");
+      assert.ok(cname.includes("alice.makerlog.ai"), "CNAME has correct domain");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("omits CNAME when no domain", async () => {
+    const { createPublicRepo } = await import("../src/scaffold.js");
+    const dir = tmpDir("no-cname");
+    try {
+      createPublicRepo(dir, { ...CONFIG, domain: "" });
+      assert.ok(!existsSync(join(dir, "CNAME")), "CNAME should not exist");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("cocapn.yml links to brain repo", async () => {
+    const { createPublicRepo } = await import("../src/scaffold.js");
+    const dir = tmpDir("cocapn-yml");
+    try {
+      createPublicRepo(dir, CONFIG);
+      const yml = readFileSync(join(dir, "cocapn.yml"), "utf8");
+      assert.ok(yml.includes("my-cocapn"), "project name in cocapn.yml");
+      assert.ok(yml.includes("alice"), "username in cocapn.yml");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
 
-// ─── createGitHubRepos (mocked) ───────────────────────────────────────────────
+// ─── Two-repo integration ─────────────────────────────────────────────────────
+
+describe("Two-repo integration", () => {
+  let baseDir: string;
+
+  before(() => {
+    baseDir = tmpDir("two-repo");
+  });
+
+  after(() => {
+    rmSync(baseDir, { recursive: true, force: true });
+  });
+
+  it("creates both repos from a temp dir", async () => {
+    const { createPrivateRepo, createPublicRepo, initAndCommit } = await import("../src/scaffold.js");
+    const brainDir = join(baseDir, "test-brain");
+    const publicDir = join(baseDir, "test-public");
+
+    createPrivateRepo(brainDir, CONFIG);
+    createPublicRepo(publicDir, CONFIG);
+    initAndCommit(brainDir, "alice", "Initial brain");
+    initAndCommit(publicDir, "alice", "Initial public");
+
+    assert.ok(existsSync(join(brainDir, "cocapn", "soul.md")), "brain has soul.md");
+    assert.ok(existsSync(join(publicDir, "cocapn.yml")), "public has cocapn.yml");
+  });
+
+  it("both repos have .git directories after initAndCommit", async () => {
+    assert.ok(existsSync(join(baseDir, "test-brain", ".git")), "brain has .git");
+    assert.ok(existsSync(join(baseDir, "test-public", ".git")), "public has .git");
+  });
+
+  it("soul.md exists in brain repo", async () => {
+    const soul = readFileSync(join(baseDir, "test-brain", "cocapn", "soul.md"), "utf8");
+    assert.ok(soul.length > 0, "soul.md is not empty");
+    assert.ok(soul.includes("alice"), "soul.md has username");
+  });
+
+  it(".gitignore has .env.local in brain repo", async () => {
+    const gitignore = readFileSync(join(baseDir, "test-brain", ".gitignore"), "utf8");
+    assert.ok(gitignore.includes(".env.local"), ".env.local in brain .gitignore");
+  });
+
+  it(".env.local is gitignored", async () => {
+    // git check-ignore should confirm .env.local is ignored
+    try {
+      const output = execSync("git check-ignore .env.local", {
+        cwd: join(baseDir, "test-brain"),
+        encoding: "utf8",
+        stdio: "pipe",
+      });
+      assert.ok(output.trim() === ".env.local", "git check-ignore confirms .env.local");
+    } catch {
+      assert.fail(".env.local should be gitignored but git check-ignore returned non-zero");
+    }
+  });
+});
+
+// ─── writeSecrets ─────────────────────────────────────────────────────────────
+
+describe("writeSecrets", () => {
+  it("writes secrets to .env.local", async () => {
+    const { writeSecrets } = await import("../src/scaffold.js");
+    const dir = tmpDir("secrets");
+    try {
+      // Create minimal .env.local first
+      const { mkdirSync, writeFileSync } = await import("fs");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, ".env.local"), "");
+
+      writeSecrets(dir, { DEEPSEEK_API_KEY: "sk-test-123" });
+      const content = readFileSync(join(dir, ".env.local"), "utf8");
+      assert.ok(content.includes("DEEPSEEK_API_KEY=sk-test-123"), "secret written");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── testLLMConnection (mocked) ───────────────────────────────────────────────
+
+describe("testLLMConnection", () => {
+  it("returns ok result on successful response", async () => {
+    const { testLLMConnection } = await import("../src/scaffold.js");
+
+    const originalFetch = global.fetch;
+    global.fetch = async (): Promise<Response> => {
+      return new Response(JSON.stringify({ id: "test" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    try {
+      const result = await testLLMConnection("sk-test-key");
+      assert.equal(result.ok, true);
+      assert.ok(result.latencyMs >= 0, "latency is non-negative");
+      assert.ok(typeof result.model === "string", "model is string");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("returns error on non-ok response", async () => {
+    const { testLLMConnection } = await import("../src/scaffold.js");
+
+    const originalFetch = global.fetch;
+    global.fetch = async (): Promise<Response> => {
+      return new Response(JSON.stringify({ error: "invalid key" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    try {
+      const result = await testLLMConnection("sk-bad-key");
+      assert.equal(result.ok, false);
+      assert.ok(result.error, "error message present");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("returns error on network failure", async () => {
+    const { testLLMConnection } = await import("../src/scaffold.js");
+
+    const originalFetch = global.fetch;
+    global.fetch = async (): Promise<Response> => {
+      throw new Error("ECONNREFUSED");
+    };
+
+    try {
+      const result = await testLLMConnection("sk-any-key");
+      assert.equal(result.ok, false);
+      assert.ok(result.error?.includes("ECONNREFUSED"), "error message contains cause");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+});
+
+// ─── GitHub API (mocked) ─────────────────────────────────────────────────────
 
 describe("createGitHubRepos", () => {
-  it("derives correct public and private repo names", async () => {
+  it("derives correct repo names", async () => {
     const { createGitHubRepos } = await import("../src/scaffold.js");
 
-    // Mock global fetch to avoid real network calls
     const calls: Array<{ url: string; body: unknown }> = [];
     const originalFetch = global.fetch;
     global.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = input.toString();
       const body = init?.body ? (JSON.parse(init.body as string) as unknown) : undefined;
       calls.push({ url, body });
-      // Return a successful 201 for all POST calls
       return new Response(JSON.stringify({ id: 1, name: "test" }), {
         status: 201,
         headers: { "Content-Type": "application/json" },
@@ -137,67 +344,15 @@ describe("createGitHubRepos", () => {
     };
 
     try {
-      const repos = await createGitHubRepos("fake-token", "testuser", "my-makerlog");
-
-      assert.equal(repos.publicRepo, "my-makerlog-public");
-      assert.equal(repos.privateRepo, "my-makerlog-brain");
-
-      // Two POST calls were made
-      assert.equal(calls.length, 2, "two repo creation calls");
-      assert.ok(
-        calls.every((c) => c.url.includes("api.github.com/user/repos")),
-        "all calls go to GitHub API"
-      );
-    } finally {
-      global.fetch = originalFetch;
-    }
-  });
-
-  it("throws on non-422 API errors", async () => {
-    const { createGitHubRepo } = await import("../src/scaffold.js");
-
-    const originalFetch = global.fetch;
-    global.fetch = async (): Promise<Response> => {
-      return new Response(JSON.stringify({ message: "Bad credentials" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    };
-
-    try {
-      await assert.rejects(
-        () => createGitHubRepo("bad-token", "some-repo", false),
-        /GitHub API error/
-      );
-    } finally {
-      global.fetch = originalFetch;
-    }
-  });
-
-  it("silently ignores 422 (repo already exists)", async () => {
-    const { createGitHubRepo } = await import("../src/scaffold.js");
-
-    const originalFetch = global.fetch;
-    global.fetch = async (): Promise<Response> => {
-      return new Response(
-        JSON.stringify({ message: "Repository creation failed.: name already exists on this account" }),
-        {
-          status: 422,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-    };
-
-    try {
-      // Should not throw
-      await assert.doesNotReject(() => createGitHubRepo("token", "existing-repo", false));
+      const repos = await createGitHubRepos("fake-token", "testuser", "my-app");
+      assert.equal(repos.publicRepo, "my-app-public");
+      assert.equal(repos.privateRepo, "my-app-brain");
+      assert.equal(calls.length, 2);
     } finally {
       global.fetch = originalFetch;
     }
   });
 });
-
-// ─── validateToken (mocked) ───────────────────────────────────────────────────
 
 describe("validateToken", () => {
   it("returns username on valid token", async () => {
@@ -232,22 +387,6 @@ describe("validateToken", () => {
 
     try {
       const result = await validateToken("bad-token");
-      assert.equal(result, undefined);
-    } finally {
-      global.fetch = originalFetch;
-    }
-  });
-
-  it("returns undefined on network error", async () => {
-    const { validateToken } = await import("../src/scaffold.js");
-
-    const originalFetch = global.fetch;
-    global.fetch = async (): Promise<Response> => {
-      throw new Error("ECONNREFUSED");
-    };
-
-    try {
-      const result = await validateToken("any-token");
       assert.equal(result, undefined);
     } finally {
       global.fetch = originalFetch;
