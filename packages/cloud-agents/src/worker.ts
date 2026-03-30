@@ -1,23 +1,21 @@
 /**
- * Cocapn Cloud Agent Worker
+ * Cocapn Cloud Agent Worker v0.2.0
  *
- * Implements both:
- * 1. HTTP API routes for task execution and webhooks
- * 2. A2A server that the local bridge delegates heavy tasks to
+ * READ-ONLY public face — brain writes happen locally, sync via git push.
+ * Cloud worker reads from KV/D1 and serves the chat UI + status API.
  *
  * HTTP API:
  *   - POST /api/execute-task — validates fleet JWT, executes scheduled task
- *   - POST /api/chat — send messages to DeepSeek LLM, get response
+ *   - POST /api/chat — send messages to DeepSeek LLM, get response (soul.md-aware)
  *   - POST /api/webhook/github — GitHub webhook handler
  *   - GET /api/status/:taskId — task execution status
- *   - GET /api/health — health check
+ *   - GET /api/status — agent status (brain state, soul.md info, version)
+ *   - GET /api/health — health check with brain state validation
  *
- * A2A Protocol:
- *   On every task:
- *     1. Reads soul.md + memory from the private GitHub repo for context
- *     2. Executes the task (stub — replace with real AI call)
- *     3. Writes results back to GitHub as a commit
- *     4. Notifies the Admiral DO so other bridge instances can see the update
+ * Soul.md:
+ *   - Compiled from KV on each request (soul.md key)
+ *   - Public mode uses publicSystemPrompt (strips private sections)
+ *   - Fallback to default prompt if soul.md not in KV
  *
  * Deploy: wrangler deploy
  * Secrets: GITHUB_PAT, FLEET_JWT_SECRET, DEEPSEEK_API_KEY  (set via `wrangler secret put`)
@@ -30,6 +28,7 @@ import { AdmiralClient } from "./admiral.js";
 import { chatWithDeepSeek } from "./llm.js";
 import type { ChatMessage } from "./llm.js";
 import { CHAT_HTML } from "./chat-html.js";
+import { SoulCompiler, type CompiledSoul } from "./soul-compiler.js";
 export { AdmiralDO } from "./admiral.js";
 
 // Auth imports
@@ -87,6 +86,35 @@ interface HealthResponse {
   ok: boolean;
   timestamp: string;
   version: string;
+  brain?: BrainHealthInfo;
+}
+
+interface AgentStatusResponse {
+  ok: boolean;
+  version: string;
+  mode: string;
+  soul: SoulStatusInfo;
+  brain: BrainHealthInfo;
+  uptime: number;
+  timestamp: string;
+}
+
+interface SoulStatusInfo {
+  loaded: boolean;
+  version: string;
+  tone: string;
+  traits: number;
+  constraints: number;
+  capabilities: number;
+  greeting: string;
+  publicPromptLength: number;
+}
+
+interface BrainHealthInfo {
+  factsAvailable: boolean;
+  wikiAvailable: boolean;
+  soulAvailable: boolean;
+  kvHealthy: boolean;
 }
 
 // ─── A2A agent card ───────────────────────────────────────────────────────────
@@ -95,7 +123,7 @@ const AGENT_CARD = {
   name:        "cocapn-cloud-agent",
   description: "Cocapn cloud agent — always-on compute backed by Git memory",
   url:         "",   // filled at request time from Host header
-  version:     "0.1.0",
+  version:     "0.2.0",
   capabilities: {
     streaming:              false,
     pushNotifications:      false,
@@ -182,21 +210,106 @@ function verifyFleetJwt(token: string, secret: string): { sub: string; iat: numb
   return payload;
 }
 
+// ─── Soul Compiler (singleton) ─────────────────────────────────────────────────
+
+const soulCompiler = new SoulCompiler();
+
+/**
+ * Load and compile soul.md from KV. Returns compiled soul or a safe default.
+ */
+async function loadCompiledSoul(env: Env): Promise<CompiledSoul> {
+  try {
+    const soulMd = await env.AUTH_KV.get("soul.md");
+    if (soulMd) {
+      return soulCompiler.compile(soulMd);
+    }
+  } catch {
+    // KV read failed — return default
+  }
+
+  // Default compiled soul when KV is empty or unavailable
+  return soulCompiler.compile("");
+}
+
+/**
+ * Check brain state via KV keys.
+ */
+async function checkBrainHealth(env: Env): Promise<BrainHealthInfo> {
+  let kvHealthy = false;
+  try {
+    // Write + read a health check key to validate KV is functional
+    await env.AUTH_KV.put("_health_check", "ok", { expirationTtl: 60 });
+    const val = await env.AUTH_KV.get("_health_check");
+    kvHealthy = val === "ok";
+  } catch {
+    kvHealthy = false;
+  }
+
+  let soulAvailable = false;
+  let factsAvailable = false;
+  let wikiAvailable = false;
+  try {
+    const soul = await env.AUTH_KV.get("soul.md");
+    soulAvailable = !!soul;
+    const facts = await env.AUTH_KV.get("facts.json");
+    factsAvailable = !!facts;
+    const wiki = await env.AUTH_KV.get("wiki/index.md");
+    wikiAvailable = !!wiki;
+  } catch {
+    // Keys may not exist — that's fine
+  }
+
+  return { factsAvailable, wikiAvailable, soulAvailable, kvHealthy };
+}
+
 // ─── HTTP API Handlers ─────────────────────────────────────────────────────────
 
 /**
  * GET /api/health
  *
- * Health check endpoint — returns 200 OK with version info.
+ * Health check with brain state validation.
  */
-function handleHealthCheck(): Response {
+async function handleHealthCheck(env: Env): Promise<Response> {
+  const brain = await checkBrainHealth(env);
   const response: HealthResponse = {
-    ok: true,
+    ok: brain.kvHealthy,
     timestamp: new Date().toISOString(),
-    version: "0.1.0",
+    version: "0.2.0",
+    brain,
   };
 
-  return jsonResponse(response);
+  return jsonResponse(response, brain.kvHealthy ? 200 : 503);
+}
+
+/**
+ * GET /api/status
+ *
+ * Agent status endpoint — returns soul.md info, brain state, version.
+ */
+async function handleAgentStatus(env: Env, startTime: number): Promise<Response> {
+  const compiled = await loadCompiledSoul(env);
+  const brain = await checkBrainHealth(env);
+
+  const status: AgentStatusResponse = {
+    ok: brain.kvHealthy,
+    version: "0.2.0",
+    mode: "public",
+    soul: {
+      loaded: compiled.systemPrompt.length > 0,
+      version: compiled.version,
+      tone: compiled.tone,
+      traits: compiled.traits.length,
+      constraints: compiled.constraints.length,
+      capabilities: compiled.capabilities.length,
+      greeting: compiled.greeting,
+      publicPromptLength: compiled.publicSystemPrompt.length,
+    },
+    brain,
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    timestamp: new Date().toISOString(),
+  };
+
+  return jsonResponse(status);
 }
 
 /**
@@ -377,7 +490,8 @@ async function handleGetTaskStatus(taskId: string, env: Env): Promise<Response> 
 /**
  * POST /api/chat
  *
- * Simple chat endpoint — accepts messages, calls DeepSeek, returns response.
+ * Chat endpoint with soul.md-based personality.
+ * Uses the public system prompt (strips private sections) in public mode.
  * Requires DEEPSEEK_API_KEY to be configured.
  */
 async function handleChat(request: Request, env: Env): Promise<Response> {
@@ -411,7 +525,22 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       return errorResponse('DEEPSEEK_API_KEY is not configured. Set it via: wrangler secret put DEEPSEEK_API_KEY', 503);
     }
 
-    const result = await chatWithDeepSeek(body.messages, env.DEEPSEEK_API_KEY);
+    // Inject soul.md personality (public mode: use publicSystemPrompt)
+    const compiled = await loadCompiledSoul(env);
+    const messages: ChatMessage[] = [];
+
+    if (compiled.publicSystemPrompt) {
+      messages.push({ role: 'system', content: compiled.publicSystemPrompt });
+    }
+
+    // Prepend soul.md system prompt, then user messages (skip any user-provided system)
+    for (const msg of body.messages) {
+      if (msg.role !== 'system') {
+        messages.push(msg);
+      }
+    }
+
+    const result = await chatWithDeepSeek(messages, env.DEEPSEEK_API_KEY);
     return jsonResponse(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -421,20 +550,37 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
 
 // ─── Response Helpers ─────────────────────────────────────────────────────────
 
-function jsonResponse(data: unknown): Response {
-  return new Response(JSON.stringify(data), {
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+};
+
+function withCors(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    headers.set(key, value);
+  }
+  return new Response(response.body, { status: response.status, headers });
+}
+
+function jsonResponse(data: unknown, status = 200): Response {
+  return withCors(new Response(JSON.stringify(data), {
+    status,
     headers: { "Content-Type": "application/json" },
-  });
+  }));
 }
 
 function errorResponse(message: string, status: number): Response {
-  return new Response(JSON.stringify({ error: message }), {
+  return withCors(new Response(JSON.stringify({ error: message }), {
     status,
     headers: { "Content-Type": "application/json" },
-  });
+  }));
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
+
+const WORKER_START_TIME = Date.now();
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -443,13 +589,7 @@ export default {
 
     // CORS for browser clients
     if (request.method === "OPTIONS") {
-      return new Response(null, {
-        headers: {
-          "Access-Control-Allow-Origin":  "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
-        },
-      });
+      return withCors(new Response(null, { status: 204 }));
     }
 
     // ── Chat UI ────────────────────────────────────────────────────────────────
@@ -463,9 +603,14 @@ export default {
 
     // ── HTTP API Routes ───────────────────────────────────────────────────────
 
-    // Health check
+    // Health check (with brain state validation)
     if (pathname === "/api/health" && request.method === "GET") {
-      return handleHealthCheck();
+      return handleHealthCheck(env);
+    }
+
+    // Agent status (soul.md info, brain state, version)
+    if (pathname === "/api/status" && request.method === "GET") {
+      return handleAgentStatus(env, WORKER_START_TIME);
     }
 
     // Execute scheduled task
@@ -660,14 +805,7 @@ export default {
     );
 
     const response = await server.handleRequest(request);
-
-    // Add CORS headers to all responses
-    const headers = new Headers(response.headers);
-    headers.set("Access-Control-Allow-Origin", "*");
-    return new Response(response.body, {
-      status:  response.status,
-      headers,
-    });
+    return withCors(response);
   },
 };
 
@@ -680,10 +818,16 @@ async function executeTask(
 ): Promise<string> {
   const factCount = context.facts.length;
 
-  // Build system prompt from context
+  // Build system prompt from context using SoulCompiler for soul.md
   const systemParts: string[] = ['You are a helpful cloud agent for cocapn.'];
+
   if (context.soul) {
-    systemParts.push(`Personality/soul:\n${context.soul}`);
+    // Compile soul.md to get the structured system prompt
+    const compiled = soulCompiler.compile(context.soul);
+    // In A2A mode use full system prompt (not public-stripped)
+    if (compiled.systemPrompt) {
+      systemParts.push(compiled.systemPrompt);
+    }
   }
   if (factCount > 0) {
     systemParts.push(`Known facts (${factCount}):\n${JSON.stringify(context.facts.slice(0, 20))}`);
