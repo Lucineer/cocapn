@@ -1,0 +1,45 @@
+name: 'cocapn-action'
+description: 'Run your cocapn agent in GitHub Actions — validate brain, run tests, report status'
+author: 'Superinstance'
+
+inputs:
+  config-path:
+    description: 'Path to cocapn config file'
+    required: false
+    default: 'cocapn/config.yml'
+  mode:
+    description: 'Agent mode (private, public, maintenance)'
+    required: false
+    default: 'private'
+  test:
+    description: 'Whether to run tests after validation'
+    required: false
+    default: 'true'
+  deploy:
+    description: 'Whether to deploy after validation passes'
+    required: false
+    default: 'false'
+  working-directory:
+    description: 'Working directory for the agent'
+    required: false
+    default: '.'
+  health-timeout:
+    description: 'Seconds to wait for health check'
+    required: false
+    default: '30'
+
+outputs:
+  status:
+    description: 'Agent status (healthy, degraded, offline)'
+  brain-facts:
+    description: 'Number of facts in the brain'
+  brain-memories:
+    description: 'Number of memories in the brain'
+  brain-wiki:
+    description: 'Number of wiki pages'
+  test-results:
+    description: 'Test results (pass, fail, skipped)'
+
+runs:
+  using: 'node22'
+  main: 'dist/index.js'

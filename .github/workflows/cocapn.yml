@@ -1,0 +1,135 @@
+name: Cocapn Agent
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 */6 * * *'  # every 6 hours
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Agent mode'
+        required: false
+        default: 'private'
+        type: choice
+        options:
+          - private
+          - public
+          - maintenance
+
+permissions:
+  contents: read
+
+jobs:
+  agent:
+    name: Run Cocapn Agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history for RepoLearner
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install cocapn CLI
+        run: npm install -g cocapn
+
+      - name: Start agent in background
+        run: |
+          cocapn start --mode ${{ inputs.mode || 'private' }} &
+          AGENT_PID=$!
+          echo "AGENT_PID=$AGENT_PID" >> "$GITHUB_ENV"
+          echo "Agent started (PID $AGENT_PID)"
+
+      - name: Wait for health check
+        run: |
+          echo "Waiting for agent to become healthy..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3100/api/status > /dev/null 2>&1; then
+              echo "Agent is healthy after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::warning::Agent did not become healthy within 30s, proceeding with offline checks"
+          kill $AGENT_PID 2>/dev/null || true
+
+      - name: Validate brain integrity
+        run: |
+          echo "=== Brain Integrity Check ==="
+          cocapn status --json > status.json 2>&1 || true
+
+          # Check facts store exists and is valid JSON
+          if [ -f memory/facts.json ]; then
+            echo "facts.json: $(python3 -c "import json; d=json.load(open('memory/facts.json')); print(f'{len(d)} entries')" 2>/dev/null || echo 'parse error')"
+          else
+            echo "::warning::facts.json not found"
+          fi
+
+          # Check memories store
+          if [ -f memory/memories.json ]; then
+            echo "memories.json: $(python3 -c "import json; d=json.load(open('memory/memories.json')); print(f'{len(d)} entries')" 2>/dev/null || echo 'parse error')"
+          else
+            echo "::warning::memories.json not found"
+          fi
+
+          # Check soul.md
+          if [ -f soul.md ]; then
+            echo "soul.md: $(wc -l < soul.md) lines"
+          else
+            echo "::warning::soul.md not found"
+          fi
+
+          # Check wiki
+          if [ -d wiki ]; then
+            WIKI_COUNT=$(find wiki -name '*.md' | wc -l)
+            echo "wiki: ${WIKI_COUNT} pages"
+          fi
+
+      - name: Run tests
+        if: ${{ inputs.mode != 'public' }}
+        run: |
+          echo "=== Running Tests ==="
+          if [ -f package.json ] && grep -q '"test"' package.json; then
+            npm test 2>&1 || echo "::warning::Some tests failed"
+          elif [ -d packages/local-bridge ]; then
+            cd packages/local-bridge && npx vitest run 2>&1 || echo "::warning::Some tests failed"
+          else
+            echo "No test runner found, skipping"
+          fi
+
+      - name: Report status
+        if: always()
+        run: |
+          echo "### Cocapn Agent Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -f status.json ]; then
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat status.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "_No status data available (agent may not have started)_" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Brain summary
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Brain Stores:**" >> "$GITHUB_STEP_SUMMARY"
+          for store in facts.json memories.json procedures.json relationships.json; do
+            if [ -f "memory/$store" ]; then
+              echo "- \`memory/$store\`: $(wc -c < "memory/$store") bytes" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -n "$AGENT_PID" ]; then
+            kill $AGENT_PID 2>/dev/null || true
+            echo "Agent stopped"
+          fi
