@@ -43,6 +43,10 @@
  *   cocapn backup list         — List backups
  *   cocapn backup restore <n>  — Restore from backup
  *   cocapn backup clean        — Remove old backups
+ *   cocapn invite create       — Create invite link
+ *   cocapn invite list         — List active invites
+ *   cocapn invite revoke <code> — Revoke invite
+ *   cocapn invite accept <code> — Accept invite
  *   cocapn version             — Show version
  */
 
@@ -76,6 +80,7 @@ import { createUpgradeCommand } from "./commands/upgrade.js";
 import { createResetCommand } from "./commands/reset.js";
 import { createServeCommand } from "./commands/serve.js";
 import { createBackupCommand } from "./commands/backup.js";
+import { createInviteCommand } from "./commands/invite.js";
 
 const VERSION = "0.1.0";
 
@@ -155,6 +160,9 @@ export function createCLI(): Command {
 
   // Backup command
   program.addCommand(createBackupCommand());
+
+  // Invite command
+  program.addCommand(createInviteCommand());
 
   return program;
 }
