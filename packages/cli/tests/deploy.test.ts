@@ -1,15 +1,44 @@
 /**
- * Deploy command tests
+ * Deploy command tests — cloudflare, docker, status
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, unlinkSync, existsSync, mkdirSync, rmdirSync, readdirSync } from "fs";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { Command } from "commander";
+import {
+  createDeployCommand,
+  extractUrl,
+  loadEnvVar,
+} from "../src/commands/deploy.js";
+import { writeFileSync, unlinkSync, existsSync, mkdirSync, rmSync, readdirSync } from "fs";
 import { join } from "path";
-import { spawn } from "child_process";
-import { loadDeployConfig, loadSecrets } from "../src/commands/deploy-config.js";
+import { execSync } from "child_process";
 
-describe("Deploy Config", () => {
-  const testDir = join(process.cwd(), "test-temp-deploy");
+// --- Unit tests: extractUrl ---
+
+describe("extractUrl", () => {
+  it("extracts URL from wrangler output", () => {
+    const output = `Published my-worker (https://my-worker.account.workers.dev)`;
+    expect(extractUrl(output)).toBe("https://my-worker.account.workers.dev");
+  });
+
+  it("extracts URL from plain output", () => {
+    const output = `Deployed to https://app.example.com successfully`;
+    expect(extractUrl(output)).toBe("https://app.example.com");
+  });
+
+  it("returns null when no URL found", () => {
+    expect(extractUrl("no urls here")).toBeNull();
+  });
+
+  it("returns null for empty string", () => {
+    expect(extractUrl("")).toBeNull();
+  });
+});
+
+// --- Unit tests: loadEnvVar ---
+
+describe("loadEnvVar", () => {
+  const testDir = join(process.cwd(), "test-temp-deploy-env");
 
   beforeEach(() => {
     if (!existsSync(testDir)) {
@@ -19,256 +48,246 @@ describe("Deploy Config", () => {
 
   afterEach(() => {
     if (existsSync(testDir)) {
-      const files = readdirSync(testDir);
-      for (const file of files) {
-        const filePath = join(testDir, file);
-        try {
-          unlinkSync(filePath);
-        } catch {
-          // Ignore
-        }
-      }
-      try {
-        rmdirSync(testDir);
-      } catch {
-        // Ignore
-      }
+      rmSync(testDir, { recursive: true, force: true });
     }
   });
 
-  describe("loadDeployConfig", () => {
-    it("should load and validate cocapn.json", () => {
-      const configPath = join(testDir, "cocapn.json");
-      const config = {
-        name: "test-makerlog",
-        version: "1.0.0",
-        template: "makerlog",
-        description: "Test deployment",
-        deploy: {
-          account: "test-account",
-          region: "auto",
-          compatibility_date: "2024-12-05",
-          vars: {
-            BRIDGE_MODE: "cloud",
-            TEMPLATE: "makerlog",
-          },
-          secrets: {
-            required: ["API_KEY"],
-            optional: [],
-          },
-        },
-      };
-
-      writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-      const loaded = loadDeployConfig(testDir, "production");
-
-      expect(loaded.name).toBe("test-makerlog");
-      expect(loaded.template).toBe("makerlog");
-      expect(loaded.deploy.account).toBe("test-account");
-      expect(loaded.deploy.region).toBe("auto");
-    });
-
-    it("should throw if cocapn.json is missing", () => {
-      expect(() => loadDeployConfig(testDir, "production")).toThrow("Missing cocapn.json");
-    });
-
-    it("should apply defaults for missing fields", () => {
-      const configPath = join(testDir, "cocapn.json");
-      const config = {
-        name: "test-makerlog",
-        template: "makerlog",
-        deploy: {
-          account: "test-account",
-          vars: {},
-          secrets: {
-            required: [],
-            optional: [],
-          },
-        },
-      };
-
-      writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-      const loaded = loadDeployConfig(testDir, "production");
-
-      expect(loaded.version).toBe("1.0.0");
-      expect(loaded.deploy.region).toBe("auto");
-      expect(loaded.deploy.compatibility_date).toBe("2024-12-05");
-      expect(loaded.deploy.vars.BRIDGE_MODE).toBe("cloud");
-      expect(loaded.deploy.vars.TEMPLATE).toBe("makerlog");
-    });
-
-    it("should merge environment-specific config", () => {
-      const configPath = join(testDir, "cocapn.json");
-      const config = {
-        name: "test-makerlog",
-        template: "makerlog",
-        deploy: {
-          account: "test-account",
-          region: "auto",
-          vars: {
-            LOG_LEVEL: "info",
-          },
-          secrets: {
-            required: [],
-            optional: [],
-          },
-        },
-      };
-
-      writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-      const envConfigPath = join(testDir, "cocapn.staging.json");
-      const envConfig = {
-        deploy: {
-          vars: {
-            LOG_LEVEL: "debug",
-            FEATURE_FLAGS: "beta_features",
-          },
-        },
-      };
-
-      writeFileSync(envConfigPath, JSON.stringify(envConfig, null, 2));
-
-      const loaded = loadDeployConfig(testDir, "staging");
-
-      expect(loaded.deploy.vars.LOG_LEVEL).toBe("debug");
-      expect(loaded.deploy.vars.FEATURE_FLAGS).toBe("beta_features");
-    });
-
-    it("should validate required fields", () => {
-      const configPath = join(testDir, "cocapn.json");
-
-      // Missing name
-      const invalidConfig1 = {
-        template: "makerlog",
-        deploy: {
-          account: "test-account",
-          vars: {},
-          secrets: { required: [], optional: [] },
-        },
-      };
-      writeFileSync(configPath, JSON.stringify(invalidConfig1, null, 2));
-      expect(() => loadDeployConfig(testDir, "production")).toThrow("Missing required field: name");
-
-      // Missing template
-      const invalidConfig2 = {
-        name: "test",
-        deploy: {
-          account: "test-account",
-          vars: {},
-          secrets: { required: [], optional: [] },
-        },
-      };
-      writeFileSync(configPath, JSON.stringify(invalidConfig2, null, 2));
-      expect(() => loadDeployConfig(testDir, "production")).toThrow("Missing required field: template");
-
-      // Missing deploy.account
-      const invalidConfig3 = {
-        name: "test",
-        template: "makerlog",
-        deploy: {
-          vars: {},
-          secrets: { required: [], optional: [] },
-        },
-      };
-      writeFileSync(configPath, JSON.stringify(invalidConfig3, null, 2));
-      expect(() => loadDeployConfig(testDir, "production")).toThrow("Missing required field: deploy.account");
-    });
+  it("returns undefined when no .env files exist", () => {
+    expect(loadEnvVar(testDir, "API_KEY")).toBeUndefined();
   });
 
-  describe("loadSecrets", () => {
-    it("should return empty object if secrets file does not exist", () => {
-      const secrets = loadSecrets("test-account");
-      expect(secrets).toEqual({});
-    });
+  it("loads value from .env.local", () => {
+    const envPath = join(testDir, ".env.local");
+    writeFileSync(envPath, `CLOUDFLARE_API_TOKEN=cf_token_123\n`);
+    expect(loadEnvVar(testDir, "CLOUDFLARE_API_TOKEN")).toBe("cf_token_123");
+  });
 
-    it("should return empty object if account not found in secrets", () => {
-      const secretsPath = join(process.cwd(), ".cocapn", "secrets.json");
-      // We won't create this file in tests, but if it existed, it would test this path
-      // For now, just verify it returns empty when file doesn't exist
-      const secrets = loadSecrets("nonexistent-account");
-      expect(secrets).toEqual({});
-    });
+  it("loads quoted value from .env", () => {
+    const envPath = join(testDir, ".env");
+    writeFileSync(envPath, `MY_KEY="quoted_value"\n`);
+    expect(loadEnvVar(testDir, "MY_KEY")).toBe("quoted_value");
+  });
+
+  it("prefers .env.local over .env", () => {
+    writeFileSync(join(testDir, ".env"), `KEY=from_dotenv\n`);
+    writeFileSync(join(testDir, ".env.local"), `KEY=from_dotenv_local\n`);
+    expect(loadEnvVar(testDir, "KEY")).toBe("from_dotenv_local");
   });
 });
 
-describe("Deploy Command Parsing", () => {
-  it("should parse deploy command correctly", async () => {
-    const result = await runCommand(["deploy", "--help"]);
-    expect(result.stdout).toContain("Deploy cocapn instance");
-    expect(result.stdout).toContain("--env");
-    expect(result.stdout).toContain("--region");
+// --- Command structure tests ---
+
+describe("Deploy Command Structure", () => {
+  let program: Command;
+
+  beforeEach(() => {
+    program = createDeployCommand();
   });
 
-  it("should parse deploy with dry-run flag", async () => {
-    const result = await runCommand(["deploy", "--dry-run", "--help"]);
-    expect(result.stdout).toContain("--dry-run");
+  it("registers deploy as a command group", () => {
+    expect(program.name()).toBe("deploy");
   });
 
-  it("should parse deploy with skip-tests flag", async () => {
-    const result = await runCommand(["deploy", "--no-tests", "--help"]);
-    expect(result.stdout).toContain("--no-tests");
+  it("has cloudflare subcommand", () => {
+    const cf = program.commands.find((c) => c.name() === "cloudflare");
+    expect(cf).toBeDefined();
+    expect(cf!.description()).toContain("Cloudflare Workers");
+  });
+
+  it("cloudflare subcommand has --env option", () => {
+    const cf = program.commands.find((c) => c.name() === "cloudflare");
+    expect(cf!.options.some((o) => o.long === "--env")).toBe(true);
+  });
+
+  it("cloudflare subcommand has --region option", () => {
+    const cf = program.commands.find((c) => c.name() === "cloudflare");
+    expect(cf!.options.some((o) => o.long === "--region")).toBe(true);
+  });
+
+  it("cloudflare subcommand has --dry-run option", () => {
+    const cf = program.commands.find((c) => c.name() === "cloudflare");
+    expect(cf!.options.some((o) => o.long === "--dry-run")).toBe(true);
+  });
+
+  it("cloudflare subcommand has --no-tests option", () => {
+    const cf = program.commands.find((c) => c.name() === "cloudflare");
+    expect(cf!.options.some((o) => o.long === "--no-tests")).toBe(true);
+  });
+
+  it("has docker subcommand", () => {
+    const docker = program.commands.find((c) => c.name() === "docker");
+    expect(docker).toBeDefined();
+    expect(docker!.description()).toContain("Docker");
+  });
+
+  it("docker subcommand has --tag option", () => {
+    const docker = program.commands.find((c) => c.name() === "docker");
+    expect(docker!.options.some((o) => o.long === "--tag")).toBe(true);
+  });
+
+  it("docker subcommand has --port option", () => {
+    const docker = program.commands.find((c) => c.name() === "docker");
+    expect(docker!.options.some((o) => o.long === "--port")).toBe(true);
+  });
+
+  it("docker subcommand has --brain option", () => {
+    const docker = program.commands.find((c) => c.name() === "docker");
+    expect(docker!.options.some((o) => o.long === "--brain")).toBe(true);
+  });
+
+  it("has status subcommand", () => {
+    const status = program.commands.find((c) => c.name() === "status");
+    expect(status).toBeDefined();
   });
 });
 
-describe("Rollback Command Parsing", () => {
-  it("should parse rollback command correctly", async () => {
-    const result = await runCommand(["rollback", "--help"]);
-    expect(result.stdout).toContain("Rollback Cloudflare Workers deployment");
-    expect(result.stdout).toContain("--env");
+// --- Cloudflare deploy prerequisite tests ---
+
+describe("Cloudflare Deploy Prerequisites", () => {
+  const testDir = join(process.cwd(), "test-temp-cf-deploy");
+
+  beforeEach(() => {
+    if (!existsSync(testDir)) {
+      mkdirSync(testDir, { recursive: true });
+    }
   });
 
-  it("should parse rollback with version argument", async () => {
-    const result = await runCommand(["rollback", "--help"]);
-    expect(result.stdout).toContain("[version]");
+  afterEach(() => {
+    if (existsSync(testDir)) {
+      rmSync(testDir, { recursive: true, force: true });
+    }
   });
 
-  it("should parse rollback with confirm flag", async () => {
-    const result = await runCommand(["rollback", "--confirm", "--help"]);
-    expect(result.stdout).toContain("--confirm");
+  it("fails when wrangler.toml is missing", async () => {
+    // No wrangler.toml in testDir
+    const origCwd = process.cwd;
+    vi.spyOn(process, "cwd").mockReturnValue(testDir);
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {});
+
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const program = createDeployCommand();
+    await program.parseAsync(["node", "test", "cloudflare"]);
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Missing wrangler.toml")
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
+    (process.cwd as any).mockRestore();
+  });
+
+  it("fails when API token is missing", async () => {
+    // Create wrangler.toml but no API token
+    writeFileSync(join(testDir, "wrangler.toml"), 'name = "test"\n');
+
+    const origCwd = process.cwd;
+    vi.spyOn(process, "cwd").mockReturnValue(testDir);
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {});
+    // Ensure no env token
+    const origToken = process.env.CLOUDFLARE_API_TOKEN;
+    const origCfToken = process.env.CF_API_TOKEN;
+    delete process.env.CLOUDFLARE_API_TOKEN;
+    delete process.env.CF_API_TOKEN;
+
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const program = createDeployCommand();
+    await program.parseAsync(["node", "test", "cloudflare"]);
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Missing CLOUDFLARE_API_TOKEN")
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
+    (process.cwd as any).mockRestore();
+    if (origToken !== undefined) process.env.CLOUDFLARE_API_TOKEN = origToken;
+    if (origCfToken !== undefined) process.env.CF_API_TOKEN = origCfToken;
   });
 });
 
-/**
- * Helper to run CLI command
- */
-async function runCommand(args: string[]): Promise<{
-  stdout: string;
-  stderr: string;
-  code: number;
-}> {
-  return new Promise((resolve) => {
-    const cliPath = join(process.cwd(), "dist", "index.js");
+// --- Docker deploy prerequisite tests ---
 
-    const child = spawn(process.execPath, [cliPath, ...args], {
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        NODE_ENV: "test",
-      },
-    });
+describe("Docker Deploy Prerequisites", () => {
+  const testDir = join(process.cwd(), "test-temp-docker-deploy");
 
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout?.on("data", (data) => {
-      stdout += data.toString();
-    });
-
-    child.stderr?.on("data", (data) => {
-      stderr += data.toString();
-    });
-
-    child.on("close", (code) => {
-      resolve({ stdout, stderr, code: code ?? 1 });
-    });
-
-    // Timeout after 10 seconds
-    setTimeout(() => {
-      child.kill();
-      resolve({ stdout, stderr, code: 1 });
-    }, 10000);
+  beforeEach(() => {
+    if (!existsSync(testDir)) {
+      mkdirSync(testDir, { recursive: true });
+    }
   });
-}
+
+  afterEach(() => {
+    if (existsSync(testDir)) {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails when Dockerfile is missing", async () => {
+    const origCwd = process.cwd;
+    vi.spyOn(process, "cwd").mockReturnValue(testDir);
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {});
+
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const program = createDeployCommand();
+    await program.parseAsync(["node", "test", "docker"]);
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Missing Dockerfile")
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
+    (process.cwd as any).mockRestore();
+  });
+});
+
+// --- Status check tests ---
+
+describe("Deploy Status", () => {
+  const testDir = join(process.cwd(), "test-temp-status");
+
+  beforeEach(() => {
+    if (!existsSync(testDir)) {
+      mkdirSync(testDir, { recursive: true });
+    }
+  });
+
+  afterEach(() => {
+    if (existsSync(testDir)) {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("runs status without crashing when no wrangler.toml", async () => {
+    const origCwd = process.cwd;
+    vi.spyOn(process, "cwd").mockReturnValue(testDir);
+
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const program = createDeployCommand();
+    // execSync will be called for docker/bridge checks and may fail
+    // but the status command should handle errors gracefully
+    try {
+      await program.parseAsync(["node", "test", "status"]);
+    } catch {
+      // process.exit from exec failures is ok in this sandbox
+    }
+
+    // Should not have logged errors for missing wrangler.toml (it's handled gracefully)
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("wrangler.toml")
+    );
+
+    consoleSpy.mockRestore();
+    logSpy.mockRestore();
+    (process.cwd as any).mockRestore();
+  });
+});

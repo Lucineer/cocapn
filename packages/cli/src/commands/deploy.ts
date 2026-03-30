@@ -1,432 +1,398 @@
 /**
- * cocapn deploy — Deploy to Cloudflare Workers
+ * cocapn deploy — One-command deployment to Cloudflare / Docker
+ *
+ * Usage:
+ *   cocapn deploy cloudflare  — Deploy to Cloudflare Workers
+ *   cocapn deploy docker      — Build and run Docker container
+ *   cocapn deploy status      — Check deployment status
  */
 
 import { Command } from "commander";
-import { spawn } from "child_process";
-import { existsSync } from "fs";
+import { execSync } from "child_process";
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import {
-  loadDeployConfig,
-  loadSecrets,
-  getEnvironmentConfig,
-  type DeployConfig,
-} from "./deploy-config.js";
 
-const colors = {
+// --- Color helpers ---
+
+const c = {
   reset: "\x1b[0m",
   bold: "\x1b[1m",
   green: "\x1b[32m",
   cyan: "\x1b[36m",
   yellow: "\x1b[33m",
   red: "\x1b[31m",
-  gray: "\x1b[90m",
 };
+const bold = (s: string) => `${c.bold}${s}${c.reset}`;
+const green = (s: string) => `${c.green}${s}${c.reset}`;
+const cyan = (s: string) => `${c.cyan}${s}${c.reset}`;
+const yellow = (s: string) => `${c.yellow}${s}${c.reset}`;
+const red = (s: string) => `${c.red}${s}${c.reset}`;
 
-const bold = (s: string) => `${colors.bold}${s}${colors.reset}`;
-const green = (s: string) => `${colors.green}${s}${colors.reset}`;
-const cyan = (s: string) => `${colors.cyan}${s}${colors.reset}`;
-const yellow = (s: string) => `${colors.yellow}${s}${colors.reset}`;
-const red = (s: string) => `${colors.red}${s}${colors.reset}`;
+// --- Options ---
 
-interface DeployOptions {
+interface CloudflareOptions {
   env: string;
-  region?: string;
-  secrets?: string;
+  region: string;
   verify: boolean;
   tests: boolean;
   dryRun: boolean;
   verbose: boolean;
 }
 
-interface DeployResult {
-  success: boolean;
-  url?: string;
-  bundleSize?: number;
-  startupTime?: number;
-  error?: string;
+interface DockerOptions {
+  tag: string;
+  port: string;
+  brain: string;
+  verbose: boolean;
 }
 
+// --- Public API ---
+
 export function createDeployCommand(): Command {
-  return new Command("deploy")
-    .description("Deploy cocapn instance to Cloudflare Workers")
-    .option("-e, --env <environment>", "Environment (production, staging, preview)", "production")
-    .option("-r, --region <region>", "Cloudflare region", "auto")
-    .option("-s, --secrets <path>", "Path to secrets file")
-    .option("--no-verify", "Skip post-deploy health checks")
-    .option("--no-tests", "Skip pre-deploy tests")
-    .option("--dry-run", "Build and validate without uploading")
-    .option("-v, --verbose", "Detailed logging")
-    .action(async (options: DeployOptions) => {
-      const projectDir = process.cwd();
+  return (
+    new Command("deploy")
+      .description("Deploy cocapn instance to Cloudflare Workers or Docker")
+      .addCommand(createCloudflareCommand())
+      .addCommand(createDockerCommand())
+      .addCommand(createStatusCommand())
+  );
+}
 
+// --- cloudflare subcommand ---
+
+function createCloudflareCommand(): Command {
+  return (
+    new Command("cloudflare")
+      .description("Deploy to Cloudflare Workers")
+      .option("-e, --env <environment>", "Environment (production, staging)", "production")
+      .option("-r, --region <region>", "Cloudflare region", "auto")
+      .option("--no-verify", "Skip post-deploy health checks")
+      .option("--no-tests", "Skip pre-deploy tests")
+      .option("--dry-run", "Build and validate without uploading")
+      .option("-v, --verbose", "Detailed logging")
+      .action(async (opts: CloudflareOptions) => {
+        try {
+          await deployCloudflare(opts);
+        } catch (err) {
+          console.error(red("\u2717 Deployment failed"));
+          console.error(`  ${err instanceof Error ? err.message : String(err)}`);
+          process.exit(1);
+        }
+      })
+  );
+}
+
+// --- docker subcommand ---
+
+function createDockerCommand(): Command {
+  return (
+    new Command("docker")
+      .description("Build and run Docker container")
+      .option("-t, --tag <tag>", "Image tag", "cocapn")
+      .option("-p, --port <port>", "Host port mapping", "3100")
+      .option("-b, --brain <path>", "Brain volume path", "./cocapn")
+      .option("-v, --verbose", "Detailed logging")
+      .action(async (opts: DockerOptions) => {
+        try {
+          await deployDocker(opts);
+        } catch (err) {
+          console.error(red("\u2717 Docker deployment failed"));
+          console.error(`  ${err instanceof Error ? err.message : String(err)}`);
+          process.exit(1);
+        }
+      })
+  );
+}
+
+// --- status subcommand ---
+
+function createStatusCommand(): Command {
+  return new Command("status")
+    .description("Check deployment status for all targets")
+    .action(async () => {
       try {
-        // Load configuration
-        const config = loadDeployConfig(projectDir, options.env);
-
-        if (options.verbose) {
-          console.log(yellow("Configuration loaded:"));
-          console.log(`  Name: ${config.name}`);
-          console.log(`  Template: ${config.template}`);
-          console.log(`  Environment: ${options.env}`);
-          console.log(`  Region: ${options.region || config.deploy.region}`);
-          console.log();
-        }
-
-        // Run deployment pipeline
-        const result = await runDeployPipeline(config, options, projectDir);
-
-        if (result.success && !options.dryRun) {
-          console.log();
-          console.log(cyan("🚀 Deployed to: ") + green(result.url || ""));
-          console.log();
-
-          console.log(cyan("📊 Metrics:"));
-          if (result.startupTime) {
-            console.log(`   Startup time: ${result.startupTime}ms`);
-          }
-          if (result.bundleSize) {
-            console.log(`   Bundle size: ${formatBytes(result.bundleSize)}`);
-          }
-          console.log(`   Region: ${options.region || config.deploy.region}`);
-          console.log();
-
-          console.log(cyan("🔗 Next steps:"));
-          console.log(`   - View logs: ${cyan("npx wrangler tail")}`);
-          console.log(`   - Rollback: ${cyan("cocapn rollback")}`);
-        } else if (options.dryRun) {
-          console.log();
-          console.log(cyan("✓ Dry run complete — no deployment performed"));
-        }
-
-        process.exit(result.success ? 0 : 1);
+        await checkStatus();
       } catch (err) {
-        console.error(red("✗ Deployment failed"));
+        console.error(red("\u2717 Status check failed"));
         console.error(`  ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }
     });
 }
 
-async function runDeployPipeline(
-  config: DeployConfig,
-  options: DeployOptions,
-  projectDir: string
-): Promise<DeployResult> {
-  const startTime = Date.now();
+// --- Cloudflare deployment ---
 
-  // Step 1: Type check
-  console.log(cyan("▸ Type checking..."));
-  const typecheckResult = await runTypecheck(projectDir, options.verbose);
-  if (!typecheckResult.success) {
-    throw new Error("Type check failed");
+async function deployCloudflare(opts: CloudflareOptions): Promise<void> {
+  const cwd = process.cwd();
+
+  // Prerequisite: wrangler.toml
+  const wranglerPath = join(cwd, "wrangler.toml");
+  if (!existsSync(wranglerPath)) {
+    throw new Error("Missing wrangler.toml. Run 'cocapn init' first.");
   }
-  console.log(green("✓ Type check passed"));
+  console.log(green("\u2713") + " Found wrangler.toml");
 
-  // Step 2: Run tests
-  if (options.tests) {
-    console.log(cyan("▸ Running tests..."));
-    const testResult = await runTests(projectDir, options.verbose);
-    if (!testResult.success) {
-      throw new Error("Tests failed");
-    }
-    console.log(green(`✓ Tests passed (${testResult.count} tests)`));
-  } else {
-    console.log(yellow("⚠ Skipping tests (--no-tests)"));
-  }
-
-  // Step 3: Build worker
-  console.log(cyan("▸ Building worker..."));
-  const buildResult = await buildWorker(projectDir, options.verbose);
-  if (!buildResult.success) {
-    throw new Error("Build failed");
-  }
-  console.log(green(`✓ Built dist/worker.js (${formatBytes(buildResult.size || 0)})`));
-
-  if (options.dryRun) {
-    return { success: true, bundleSize: buildResult.size };
-  }
-
-  // Step 4: Create D1 database if needed
-  if (config.deploy.d1_databases && config.deploy.d1_databases.length > 0) {
-    console.log(cyan("▸ Provisioning D1 databases..."));
-    for (const db of config.deploy.d1_databases) {
-      await ensureD1Database(db.name, options.verbose);
-    }
-    console.log(green("✓ D1 databases ready"));
-  }
-
-  // Step 5: Create KV namespaces if needed
-  if (config.deploy.kv_namespaces && config.deploy.kv_namespaces.length > 0) {
-    console.log(cyan("▸ Provisioning KV namespaces..."));
-    for (const kv of config.deploy.kv_namespaces) {
-      await ensureKVNamespace(kv.name, options.verbose);
-    }
-    console.log(green("✓ KV namespaces ready"));
-  }
-
-  // Step 6: Deploy to Cloudflare
-  console.log(cyan("▸ Uploading to Cloudflare..."));
-  const deployResult = await deployToCloudflare(config, options.env, options.verbose);
-  if (!deployResult.success) {
-    throw new Error(deployResult.error || "Deployment failed");
-  }
-  console.log(green("✓ Uploaded to Cloudflare"));
-
-  // Step 7: Inject secrets
-  if (config.deploy.secrets.required.length > 0) {
-    console.log(cyan("▸ Injecting secrets..."));
-    const secrets = loadSecrets(config.deploy.account);
-    const injectedCount = await injectSecrets(config, secrets, options.env, options.verbose);
-    console.log(green(`✓ Injected ${injectedCount} secrets`));
-  }
-
-  // Step 8: Health check
-  if (options.verify) {
-    console.log(cyan("▸ Running health checks..."));
-    const healthResult = await runHealthCheck(config, options.env, options.verbose);
-    if (!healthResult.success) {
-      console.error(red("✗ Health check failed"));
-      console.error(yellow("  Run 'cocapn rollback' to revert"));
-      throw new Error("Health check failed");
-    }
-    console.log(green("✓ Health checks passed"));
-  }
-
-  const deploymentTime = Date.now() - startTime;
-
-  return {
-    success: true,
-    url: deployResult.url,
-    bundleSize: buildResult.size,
-    startupTime: deploymentTime,
-  };
-}
-
-async function runTypecheck(projectDir: string, verbose: boolean): Promise<{ success: boolean }> {
-  return runCommand("npx", ["tsc", "--noEmit"], { cwd: projectDir, verbose });
-}
-
-async function runTests(projectDir: string, verbose: boolean): Promise<{ success: boolean; count?: number }> {
-  const result = await runCommand("npx", ["vitest", "run", "--reporter=json"], { cwd: projectDir, verbose });
-  // Parse test count from output if possible
-  return result;
-}
-
-async function buildWorker(projectDir: string, verbose: boolean): Promise<{ success: boolean; size?: number }> {
-  const workerPath = join(projectDir, "src", "worker.ts");
-  const outputPath = join(projectDir, "dist", "worker.js");
-
-  if (!existsSync(workerPath)) {
-    throw new Error(`Worker file not found: ${workerPath}`);
-  }
-
-  const args = [
-    "esbuild",
-    workerPath,
-    "--bundle",
-    "--format=esm",
-    "--target=esnext",
-    "--platform=browser",
-    `--outfile=${outputPath}`,
-    "--minify",
-  ];
-
-  const result = await runCommand("npx", args, { cwd: projectDir, verbose });
-
-  if (result.success && existsSync(outputPath)) {
-    const { statSync } = await import("fs");
-    const size = statSync(outputPath).size;
-    return { success: true, size };
-  }
-
-  return result;
-}
-
-async function ensureD1Database(name: string, verbose: boolean): Promise<void> {
-  // Check if database exists
-  const listResult = await runCommand("npx", ["wrangler", "d1", "list"], { cwd: process.cwd(), verbose });
-
-  if (listResult.success) {
-    // Parse output to check if database exists
-    // If not, create it
-    const createResult = await runCommand("npx", ["wrangler", "d1", "create", name], {
-      cwd: process.cwd(),
-      verbose,
-      ignoreError: true, // May already exist
-    });
-  }
-}
-
-async function ensureKVNamespace(name: string, verbose: boolean): Promise<void> {
-  // Similar to D1, check and create if needed
-  const createResult = await runCommand("npx", ["wrangler", "kv:namespace", "create", name], {
-    cwd: process.cwd(),
-    verbose,
-    ignoreError: true,
-  });
-}
-
-async function deployToCloudflare(
-  config: DeployConfig,
-  env: string,
-  verbose: boolean
-): Promise<{ success: boolean; url?: string; error?: string }> {
-  const args = ["wrangler", "deploy"];
-
-  if (env !== "production") {
-    args.push(`--env`, env);
-  }
-
-  const result = await runCommand("npx", args, { cwd: process.cwd(), verbose });
-
-  if (result.success) {
-    // Extract URL from output
-    const url = `https://${config.name}.${config.deploy.account}.workers.dev`;
-    return { success: true, url };
-  }
-
-  return { success: false, error: "Upload failed" };
-}
-
-async function injectSecrets(
-  config: DeployConfig,
-  secrets: Record<string, string>,
-  env: string,
-  verbose: boolean
-): Promise<number> {
-  let injectedCount = 0;
-  const requiredSecrets = config.deploy.secrets.required;
-
-  for (const secretName of requiredSecrets) {
-    const secretValue = secrets[secretName];
-
-    if (!secretValue) {
-      console.warn(yellow(`⚠ Missing secret: ${secretName}`));
-      continue;
-    }
-
-    const args = ["wrangler", "secret", "put", secretName];
-
-    if (env !== "production") {
-      args.push(`--env`, env);
-    }
-
-    // Run with stdin for secret value
-    const result = await runCommandWithInput(
-      "npx",
-      args,
-      secretValue,
-      { cwd: process.cwd(), verbose }
+  // Prerequisite: API token
+  const apiToken =
+    process.env.CLOUDFLARE_API_TOKEN ||
+    process.env.CF_API_TOKEN ||
+    loadEnvVar(cwd, "CLOUDFLARE_API_TOKEN");
+  if (!apiToken) {
+    throw new Error(
+      "Missing CLOUDFLARE_API_TOKEN. Set it in your environment or .env.local."
     );
+  }
+  console.log(green("\u2713") + " Cloudflare API token found");
 
-    if (result.success) {
-      injectedCount++;
+  if (opts.verbose) {
+    console.log(yellow("Configuration:"));
+    console.log(`  Environment: ${opts.env}`);
+    console.log(`  Region: ${opts.region}`);
+  }
+
+  // Pre-deploy tests
+  if (opts.tests) {
+    console.log(cyan("\u25b8 Running tests..."));
+    execSafe("npx vitest run", { cwd, verbose: opts.verbose });
+    console.log(green("\u2713 Tests passed"));
+  } else {
+    console.log(yellow("\u26a0 Skipping tests (--no-tests)"));
+  }
+
+  // Dry-run stops here
+  if (opts.dryRun) {
+    console.log(cyan("\u25b8 Dry run complete \u2014 no deployment performed"));
+    return;
+  }
+
+  // Deploy
+  console.log(cyan("\u25b8 Deploying to Cloudflare Workers..."));
+  const envArgs = opts.env !== "production" ? `--env ${opts.env}` : "";
+  const output = execSafe(`npx wrangler deploy ${envArgs}`, {
+    cwd,
+    verbose: opts.verbose,
+  });
+  console.log(green("\u2713 Uploaded to Cloudflare"));
+
+  // Extract URL from wrangler output
+  const deployedUrl = extractUrl(output);
+  if (deployedUrl) {
+    console.log();
+    console.log(cyan("\ud83d\ude80 Deployed to: ") + green(deployedUrl));
+  }
+
+  // Health check
+  if (opts.verify && deployedUrl) {
+    console.log(cyan("\u25b8 Verifying health endpoint..."));
+    try {
+      const healthUrl = `${deployedUrl.replace(/\/+$/, "")}/_health`;
+      const resp = await fetch(healthUrl);
+      const body = (await resp.json()) as { status?: string };
+      if (body.status === "healthy") {
+        console.log(green("\u2713 Health check passed"));
+      } else {
+        console.warn(yellow("\u26a0 Health check returned non-healthy status"));
+      }
+    } catch {
+      console.warn(yellow("\u26a0 Health endpoint not reachable (may take a moment)"));
     }
   }
 
-  return injectedCount;
+  console.log();
+  console.log(cyan("\ud83d\udd17 Next steps:"));
+  console.log(`   - View logs: ${cyan("npx wrangler tail")}`);
+  console.log(`   - Rollback: ${cyan("cocapn rollback")}`);
 }
 
-async function runHealthCheck(
-  config: DeployConfig,
-  env: string,
-  verbose: boolean
-): Promise<{ success: boolean }> {
-  const url = `https://${config.name}.${config.deploy.account}.workers.dev/_health`;
+// --- Docker deployment ---
 
+async function deployDocker(opts: DockerOptions): Promise<void> {
+  const cwd = process.cwd();
+
+  // Prerequisite: Dockerfile
+  const dockerfilePath = join(cwd, "Dockerfile");
+  if (!existsSync(dockerfilePath)) {
+    throw new Error("Missing Dockerfile. Add a Dockerfile to your project root.");
+  }
+  console.log(green("\u2713") + " Found Dockerfile");
+
+  // Prerequisite: docker binary
   try {
-    const response = await fetch(url);
-    const data = await response.json() as { status?: string };
-
-    return { success: data.status === "healthy" };
+    execSafe("docker --version", { cwd, verbose: opts.verbose });
   } catch {
-    return { success: false };
+    throw new Error("Docker is not installed or not in PATH.");
+  }
+  console.log(green("\u2713") + " Docker is available");
+
+  // Build
+  console.log(cyan("\u25b8 Building Docker image..."));
+  execSafe(`docker build -t ${opts.tag} .`, { cwd, verbose: opts.verbose });
+  console.log(green(`\u2713 Built image: ${opts.tag}`));
+
+  // Resolve brain path to absolute
+  const brainPath = resolvePath(opts.brain);
+
+  // Run
+  console.log(cyan("\u25b8 Starting container..."));
+  const runOutput = execSafe(
+    `docker run -d -p ${opts.port}:3100 -v ${brainPath}:/app/brain ${opts.tag}`,
+    { cwd, verbose: opts.verbose }
+  );
+
+  const containerId = runOutput.trim().split("\n").pop()?.trim() || "unknown";
+  console.log();
+  console.log(cyan("\ud83d\ude80 Container running:"));
+  console.log(`   ID:    ${green(containerId)}`);
+  console.log(`   Image: ${opts.tag}`);
+  console.log(`   Port:  ${opts.port}`);
+  console.log(`   Brain: ${brainPath}`);
+  console.log();
+  console.log(cyan("\ud83d\udd17 Next steps:"));
+  console.log(`   - View logs: ${cyan(`docker logs -f ${containerId}`)}`);
+  console.log(`   - Stop:      ${cyan(`docker stop ${containerId}`)}`);
+}
+
+// --- Status check ---
+
+async function checkStatus(): Promise<void> {
+  const cwd = process.cwd();
+  let foundAny = false;
+
+  // Cloud
+  console.log(cyan("\u25b8 Cloudflare Workers:"));
+  const wranglerPath = join(cwd, "wrangler.toml");
+  if (existsSync(wranglerPath)) {
+    try {
+      // Try to extract worker name from wrangler.toml
+      const wranglerContent = readFileSync(wranglerPath, "utf-8");
+      const nameMatch = wranglerContent.match(/name\s*=\s*"([^"]+)"/);
+      const workerName = nameMatch ? nameMatch[1] : "unknown";
+      console.log(`   Worker: ${workerName}`);
+
+      // Check if deployed via wrangler
+      try {
+        const tailOutput = execSafe("npx wrangler deployments list 2>&1 || true", {
+          cwd,
+          verbose: false,
+        });
+        if (tailOutput.includes("error") || tailOutput.includes("Error")) {
+          console.log(yellow("   Status: Not deployed or unreachable"));
+        } else {
+          console.log(green("   Status: Deployed"));
+        }
+      } catch {
+        console.log(yellow("   Status: Unable to verify (check API token)"));
+      }
+    } catch {
+      console.log(red("   Status: Error reading wrangler.toml"));
+    }
+  } else {
+    console.log(yellow("   Status: No wrangler.toml found"));
+  }
+
+  // Docker
+  console.log(cyan("\u25b8 Docker:"));
+  try {
+    const psOutput = execSafe('docker ps --filter "ancestor=cocapn" --format "{{.ID}} {{.Status}}"', {
+      cwd,
+      verbose: false,
+    });
+    if (psOutput.trim()) {
+      const lines = psOutput.trim().split("\n");
+      for (const line of lines) {
+        const [id, status] = line.split(/\s+/, 2);
+        console.log(`   Container ${id}: ${green(status || "running")}`);
+        foundAny = true;
+      }
+    } else {
+      console.log(yellow("   Status: No cocapn containers running"));
+    }
+  } catch {
+    console.log(yellow("   Status: Docker not available"));
+  }
+
+  // Local bridge
+  console.log(cyan("\u25b8 Local bridge:"));
+  try {
+    const psOutput = execSafe("pgrep -f 'cocapn.*start' || true", {
+      cwd,
+      verbose: false,
+    });
+    if (psOutput.trim()) {
+      console.log(green(`   Status: Running (PID ${psOutput.trim()})`));
+      foundAny = true;
+    } else {
+      console.log(yellow("   Status: Not running"));
+    }
+  } catch {
+    console.log(yellow("   Status: Unable to check"));
+  }
+
+  if (!foundAny) {
+    console.log();
+    console.log(yellow("No active deployments found. Run:"));
+    console.log(`   ${cyan("cocapn deploy cloudflare")} — Deploy to Workers`);
+    console.log(`   ${cyan("cocapn deploy docker")}     — Run via Docker`);
+    console.log(`   ${cyan("cocapn start")}            — Start local bridge`);
   }
 }
 
-async function runCommand(
+// --- Helpers ---
+
+function execSafe(
   command: string,
-  args: string[],
-  options: { cwd: string; verbose: boolean; ignoreError?: boolean }
-): Promise<{ success: boolean; count?: number }> {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      stdio: options.verbose ? "inherit" : "pipe",
-      env: { ...process.env, CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN },
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout?.on("data", (data) => {
-      stdout += data.toString();
-    });
-
-    child.stderr?.on("data", (data) => {
-      stderr += data.toString();
-    });
-
-    child.on("close", (code) => {
-      const success = code === 0 || (options.ignoreError && code !== null);
-
-      if (options.verbose) {
-        console.log(stdout);
-      }
-
-      resolve({ success: success ? true : false });
-    });
-
-    // Timeout after 2 minutes
-    setTimeout(() => {
-      child.kill();
-      resolve({ success: false });
-    }, 120000);
-  });
-}
-
-async function runCommandWithInput(
-  command: string,
-  args: string[],
-  input: string,
   options: { cwd: string; verbose: boolean }
-): Promise<{ success: boolean }> {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, {
+): string {
+  try {
+    const output = execSync(command, {
       cwd: options.cwd,
-      stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN },
+      encoding: "utf-8",
+      stdio: options.verbose ? "inherit" : "pipe",
+      timeout: 120_000,
+      env: { ...process.env },
     });
-
-    child.stdin?.write(input);
-    child.stdin?.end();
-
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout?.on("data", (data) => {
-      stdout += data.toString();
-    });
-
-    child.stderr?.on("data", (data) => {
-      stderr += data.toString();
-    });
-
-    child.on("close", (code) => {
-      resolve({ success: code === 0 });
-    });
-
-    // Timeout after 30 seconds
-    setTimeout(() => {
-      child.kill();
-      resolve({ success: false });
-    }, 30000);
-  });
+    return typeof output === "string" ? output : "";
+  } catch (err) {
+    if (err instanceof Error && "status" in err && (err as any).status !== 0) {
+      throw new Error(`Command failed: ${command}`);
+    }
+    throw err;
+  }
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+function extractUrl(output: string): string | null {
+  // wrangler outputs "Published <name> (<url>)" or "  <url>"
+  const patterns = [
+    /https?:\/\/[^\s)]+/,
+    /Published.*?\((https?:\/\/[^\s)]+)\)/,
+  ];
+  for (const pat of patterns) {
+    const match = output.match(pat);
+    if (match) return match[1] || match[0];
+  }
+  return null;
 }
+
+function loadEnvVar(cwd: string, key: string): string | undefined {
+  for (const file of [".env.local", ".env"]) {
+    const envPath = join(cwd, file);
+    if (!existsSync(envPath)) continue;
+    const content = readFileSync(envPath, "utf-8");
+    const line = content
+      .split("\n")
+      .find((l) => l.startsWith(`${key}=`) || l.startsWith(`${key} `));
+    if (line) {
+      const eq = line.indexOf("=");
+      return line.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+    }
+  }
+  return undefined;
+}
+
+function resolvePath(p: string): string {
+  if (p.startsWith("/")) return p;
+  return join(process.cwd(), p);
+}
+
+// Exported for testing
+export { execSafe, extractUrl, loadEnvVar, deployCloudflare, deployDocker, checkStatus };

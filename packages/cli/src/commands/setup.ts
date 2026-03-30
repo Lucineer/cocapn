@@ -213,17 +213,16 @@ export async function runSetup(options: SetupOptions): Promise<void> {
   console.log(`\n${bold(magenta("cocapn setup"))} — Interactive onboarding wizard`);
   console.log(`${dim("The repo IS the agent. Let's set yours up.")}\n`);
 
-  let answers: SetupAnswers;
+  let answers: SetupAnswers = {
+    projectName: options.projectName || "my-agent",
+    userName: options.userName || "User",
+    domain: options.domain || "",
+    llmProvider: options.llmProvider || "deepseek",
+    apiKey: "",
+  };
 
   if (options.nonInteractive) {
     // Non-interactive mode: use defaults or provided flags
-    answers = {
-      projectName: options.projectName || "my-agent",
-      userName: options.userName || "User",
-      domain: options.domain || "",
-      llmProvider: options.llmProvider || "deepseek",
-      apiKey: "",
-    };
     console.log(dim("Non-interactive mode — using defaults and flags."));
   } else {
     // Interactive mode
