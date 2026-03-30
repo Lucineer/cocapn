@@ -92,7 +92,11 @@ describe("Brain mode-aware access", () => {
     repoRoot = await makeTempRepo();
   });
 
-  afterEach(() => rmSync(repoRoot, { recursive: true, force: true }));
+  afterEach(() => {
+    // Clean up any leftover lock files
+    try { rmSync(join(repoRoot, ".cocapn", "brain", ".lock"), { force: true }); } catch { /* ok */ }
+    rmSync(repoRoot, { recursive: true, force: true });
+  });
 
   describe("getFact", () => {
     it("returns private.* facts in private mode (default)", () => {

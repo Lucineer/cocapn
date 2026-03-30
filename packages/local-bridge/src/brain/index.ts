@@ -213,7 +213,7 @@ export class Brain {
     if (effectiveMode === "public" || effectiveMode === "a2a") {
       return; // Read-only in public/a2a mode
     }
-    const release = await acquireLock();
+    const release = await acquireLock(this.repoRoot);
     try {
       const facts = this.readFacts();
       facts[key] = value;
@@ -229,7 +229,7 @@ export class Brain {
    * No-op (no commit) if the key doesn't exist.
    */
   async deleteFact(key: string): Promise<void> {
-    const release = await acquireLock();
+    const release = await acquireLock(this.repoRoot);
     try {
       const facts = this.readFacts();
       if (!(key in facts)) return;
@@ -366,7 +366,7 @@ export class Brain {
    * Also stores embedding if vector search is available.
    */
   async addWikiPage(sourcePath: string, destName?: string): Promise<void> {
-    const release = await acquireLock();
+    const release = await acquireLock(this.repoRoot);
     try {
       const wikiDir = join(this.repoRoot, "cocapn", "wiki");
       ensureDir(wikiDir);
@@ -403,7 +403,7 @@ export class Brain {
    * Task id is a timestamp slug. Returns the task id.
    */
   async createTask(title: string, description: string): Promise<string> {
-    const release = await acquireLock();
+    const release = await acquireLock(this.repoRoot);
     try {
       const tasksDir = join(this.repoRoot, "cocapn", "tasks");
       ensureDir(tasksDir);
@@ -616,7 +616,9 @@ export class Brain {
 
 // ─── File Lock (advisory, mkdir-based for portability) ─────────────────────────
 
-const LOCK_DIR = join(homedir(), ".cocapn", "brain");
+function getLockDir(repoRoot: string): string {
+  return join(repoRoot, ".cocapn", "brain");
+}
 const LOCK_POLL_INTERVAL = 100; // ms between lock acquisition attempts
 const LOCK_TIMEOUT = 5_000;     // ms before giving up
 
@@ -625,9 +627,13 @@ const LOCK_TIMEOUT = 5_000;     // ms before giving up
  * Uses mkdir-based locking which is atomic on all platforms.
  * Returns a release function that must be called in a finally block.
  */
-async function acquireLock(): Promise<() => void> {
-  const lockPath = join(LOCK_DIR, ".lock");
+async function acquireLock(repoRoot: string): Promise<() => void> {
+  const lockDir = getLockDir(repoRoot);
+  const lockPath = join(lockDir, ".lock");
   const deadline = Date.now() + LOCK_TIMEOUT;
+
+  // Ensure lock directory exists
+  ensureDir(lockDir);
 
   while (true) {
     try {
