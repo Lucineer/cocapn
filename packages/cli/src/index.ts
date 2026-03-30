@@ -58,6 +58,16 @@
  *   cocapn auth keys list       — Show configured keys (masked)
  *   cocapn auth keys set <provider> <key> — Set API key
  *   cocapn auth keys remove <provider>   — Remove API key
+ *   cocapn learn file <path>   — Learn from a file
+ *   cocapn learn url <url>     — Learn from a URL
+ *   cocapn learn text <text>   — Learn from direct text
+ *   cocapn learn list          — Show what the agent has learned
+ *   cocapn learn forget <id>   — Remove a knowledge entry
+ *   cocapn webhooks list                       — List registered webhooks
+ *   cocapn webhooks add <url> --events <evts>  — Add a webhook
+ *   cocapn webhooks remove <url>               — Remove a webhook
+ *   cocapn webhooks test <url>                 — Send test payload
+ *   cocapn webhooks logs                       — Show recent deliveries
  *   cocapn version             — Show version
  */
 
@@ -94,6 +104,9 @@ import { createBackupCommand } from "./commands/backup.js";
 import { createInviteCommand } from "./commands/invite.js";
 import { createRemoteCommand } from "./commands/remote.js";
 import { createAuthCommand } from "./commands/auth.js";
+import { createPublishCommand } from "./commands/publish.js";
+import { createLearnCommand } from "./commands/learn.js";
+import { createWebhooksCommand } from "./commands/webhooks.js";
 
 const VERSION = "0.1.0";
 
@@ -120,6 +133,12 @@ export function createCLI(): Command {
 
   // Sync commands
   program.addCommand(createSyncCommand());
+
+  // Publish command (brain → face)
+  program.addCommand(createPublishCommand());
+
+  // Learn command (teach the agent)
+  program.addCommand(createLearnCommand());
 
   // Wiki commands
   program.addCommand(createWikiCommand());
@@ -182,6 +201,9 @@ export function createCLI(): Command {
 
   // Auth command
   program.addCommand(createAuthCommand());
+
+  // Webhooks command
+  program.addCommand(createWebhooksCommand());
 
   return program;
 }
