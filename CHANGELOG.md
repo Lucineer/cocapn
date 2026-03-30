@@ -5,6 +5,38 @@ All notable changes to cocapn will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-30
+
+### Breaking Changes
+- **Paradigm shift**: The repo IS the agent (not 'an agent runtime')
+- **Two-repo model**: Private brain repo + public face repo
+- **Removed**: tree-search, graph, assembly, testing, browser-automation, landing, marketplace packages (~30K lines)
+
+### New Features
+- **RepoLearner**: Git history analysis for repo understanding
+- **Publishing Layer**: Public/private boundary enforcement, PII sanitizer, mode switcher
+- **Brain Mode-Aware Access**: Public mode filters private.* facts
+- **soul.md Compiler**: YAML frontmatter parsing, section extraction, public/private system prompts
+- **Soul Templates**: 5 ready-to-use templates (fishing-buddy, dungeon-master, deckboss, developer-assistant, student-tutor)
+- **A2A I/O Layer**: Agent-to-agent communication with HTTP and local transport
+- **Local LLM Provider**: Ollama + llama.cpp for offline/air-gapped deployment
+- **TwoRepoSync**: Manages private brain + public face repos simultaneously
+- **Docker Support**: Multi-stage Dockerfile, docker-compose, air-gapped deployment
+- **Onboarding Wizard**: Interactive `cocapn setup` CLI command
+- **Community Knowledge Pipeline**: Git-based model improvement (ingest, validate, export)
+- **Status Dashboard API**: Real-time agent health, memory, fleet metrics
+
+### Improvements
+- Brain lock path now per-repo (not global homedir)
+- Brain test isolation fixed (conversation-memory, knowledge-pack pass in batch)
+- create-cocapn tests converted from node:test to vitest
+- README rewritten for repo-first paradigm
+- CLAUDE.md rewritten for new architecture
+
+### Infrastructure
+- 134 commits, 280 source files, 119 test files, ~98K lines TypeScript
+- 832+ tests pass across 14+ test suites
+
 ## [0.1.0] - 2026-03-29
 
 ### Added
@@ -68,4 +100,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CONTRIBUTING.md, SECURITY.md
 - 104 test files, ~1500+ tests
 
+[0.2.0]: https://github.com/CedarBeach2019/cocapn/releases/tag/v0.2.0
 [0.1.0]: https://github.com/CedarBeach2019/cocapn/releases/tag/v0.1.0

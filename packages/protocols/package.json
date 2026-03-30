@@ -1,6 +1,6 @@
 {
   "name": "@cocapn/protocols",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shared MCP and A2A protocol implementations for Cocapn — works in both Node.js (local bridge) and Cloudflare Workers",
   "license": "MIT",
   "type": "module",

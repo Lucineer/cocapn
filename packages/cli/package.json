@@ -1,6 +1,6 @@
 {
   "name": "cocapn",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Cocapn — The self-hosted AI agent runtime by Superinstance",
   "type": "module",
   "bin": {
