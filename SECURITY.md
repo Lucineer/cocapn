@@ -92,4 +92,4 @@ Cocapn can run with **zero external network calls**:
 
 ---
 
-Maintained by [Superinstance](https://github.com/superinstance).
+Maintained by [CedarBeach2019](https://github.com/CedarBeach2019/cocapn) (active fork of [superinstance/cocapn](https://github.com/superinstance/cocapn)).

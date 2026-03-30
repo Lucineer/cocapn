@@ -2,6 +2,7 @@
   "name": "@cocapn/local-bridge",
   "version": "0.1.0",
   "description": "Local Node.js bridge — WebSocket server, Git sync, and agent spawner for the Cocapn hybrid OS",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "cocapn-bridge": "./dist/esm/main.js",

@@ -1,6 +1,6 @@
 # Contributing to Cocapn
 
-Thanks for your interest! Cocapn is an open-source agent runtime by [Superinstance](https://github.com/superinstance).
+Thanks for your interest! Cocapn is an open-source agent runtime. [CedarBeach2019/cocapn](https://github.com/CedarBeach2019/cocapn) is the active fork (upstream: [superinstance/cocapn](https://github.com/superinstance/cocapn)).
 
 ## Quick Start
 
@@ -59,4 +59,4 @@ By contributing, you agree that your code will be licensed under the MIT License
 
 ---
 
-Built by [Superinstance](https://github.com/superinstance).
+Built by [Superinstance](https://superinstance.com). Active development at [CedarBeach2019/cocapn](https://github.com/CedarBeach2019/cocapn).

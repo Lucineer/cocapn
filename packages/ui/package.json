@@ -2,6 +2,7 @@
   "name": "@cocapn/ui",
   "version": "0.1.0",
   "description": "Cocapn React SPA — domain-skinned agent OS interface",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",

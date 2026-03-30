@@ -42,7 +42,7 @@ cd packages/cli && node bin/cocapn.js init ~/.cocapn
 node bin/cocapn.js start
 ```
 
-Open `localhost:8787`, chat, close it, restart — your agent remembers everything.
+Open `localhost:3100`, chat, close it, restart — your agent remembers everything.
 
 ## Is It Real?
 
