@@ -6,6 +6,8 @@ export interface Soul {
   tone: string;
   model: string;
   body: string;
+  theme?: string;
+  avatar?: string;
 }
 
 const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?/;
@@ -29,6 +31,8 @@ export function loadSoul(soulPath: string): Soul {
     tone: meta.tone || 'neutral',
     model: meta.model || 'deepseek',
     body: body.trim(),
+    theme: meta.theme,
+    avatar: meta.avatar,
   };
 }
 

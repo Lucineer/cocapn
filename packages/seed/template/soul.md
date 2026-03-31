@@ -2,6 +2,8 @@
 name: unnamed
 tone: neutral
 model: deepseek
+theme: ocean
+avatar: 🤖
 ---
 
 # I Am
