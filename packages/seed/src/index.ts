@@ -488,9 +488,20 @@ async function main(): Promise<void> {
       port: { type: 'string', default: '3100' },
       web: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h' },
+      version: { type: 'boolean', short: 'v' },
     },
     allowPositionals: true,
   });
+
+  if (args.values.version) {
+    try {
+      const pkg = JSON.parse(readFileSync(join(import.meta.dirname ?? '.', '..', 'package.json'), 'utf-8')) as { version: string };
+      console.log(`cocapn v${pkg.version}`);
+    } catch {
+      console.log('cocapn v0.1.0');
+    }
+    process.exit(0);
+  }
 
   if (args.values.help || args.positionals[0] === 'help') {
     console.log('cocapn — your repo is alive');
