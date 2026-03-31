@@ -25,7 +25,7 @@ const NEGATIVE = /\b(hate|bad|awful|angry|frustrated|annoyed|broken|terrible|wor
 // ─── Public API ────────────────────────────────────────────────────────────────
 
 /** Extract learnings from a user message and auto-save facts to memory. */
-export function extract(message: string, memory: Memory): Extraction {
+export function extract(message: string, memory: Memory, userId?: string): Extraction {
   const result: Extraction = { facts: [], decisions: [], questions: [], tone: 'neutral' };
 
   // Tone
@@ -66,7 +66,11 @@ export function extract(message: string, memory: Memory): Extraction {
       const k = key(match);
       const v = match[1].trim();
       result.facts.push({ key: k, value: v });
-      memory.facts[k] = v;
+      if (userId) {
+        memory.setUserFact(userId, k, v);
+      } else {
+        memory.facts[k] = v;
+      }
     }
   }
 
