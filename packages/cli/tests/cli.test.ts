@@ -176,7 +176,7 @@ describe("Command Parsing", () => {
   });
 
   // tree and graph commands removed in v0.2.0 (dead code cleanup)
-  // see: https://github.com/CedarBeach2019/cocapn/commit/5d6e4ef
+  // see: https://github.com/Lucineer/cocapn/commit/5d6e4ef
 
   it("should parse tokens command correctly", async () => {
     const result = await runCommand(["tokens", "--help"]);

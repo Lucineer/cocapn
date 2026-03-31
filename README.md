@@ -6,7 +6,7 @@
 
 The repository IS the agent. Not a runtime that works on repos — the repo itself is a living entity. Its code, AI, memory, wiki, frontend, and backend all grow together in Git. Two repos: private brain, public face. Clone it, it works. Deploy anywhere.
 
-[![CI](https://github.com/CedarBeach2019/cocapn/actions/workflows/ci.yml/badge.svg)](https://github.com/CedarBeach2019/cocapn/actions/workflows/ci.yml)
+[![CI](https://github.com/Lucineer/cocapn/actions/workflows/ci.yml/badge.svg)](https://github.com/Lucineer/cocapn/actions/workflows/ci.yml)
 [![npm version](https://badge.fury.io/js/cocapn.svg)](https://www.npmjs.com/package/cocapn)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 

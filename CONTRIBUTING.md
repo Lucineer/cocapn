@@ -2,7 +2,7 @@
 
 Cocapn is an open-source agent runtime where **the repo IS the agent**. Contributions are welcome — whether fixing bugs, adding features, improving docs, or building new plugins and templates.
 
-Active fork: [CedarBeach2019/cocapn](https://github.com/CedarBeach2019/cocapn) (upstream: [superinstance/cocapn](https://github.com/superinstance/cocapn)).
+Active fork: [Lucineer/cocapn](https://github.com/Lucineer/cocapn) (upstream: [superinstance/cocapn](https://github.com/superinstance/cocapn)).
 
 ---
 
@@ -87,7 +87,7 @@ Author: Superinstance
 1. Create a branch from `main`
 2. Make your changes with clear commits
 3. Push to your fork
-4. Open a PR against `CedarBeach2019/cocapn:main`
+4. Open a PR against `Lucineer/cocapn:main`
 5. Ensure CI passes (build + typecheck + lint + test)
 
 ---
@@ -349,4 +349,4 @@ By contributing, you agree that your code will be licensed under the MIT License
 
 ---
 
-Built by [Superinstance](https://superinstance.com). Active development at [CedarBeach2019/cocapn](https://github.com/CedarBeach2019/cocapn).
+Built by [Superinstance](https://superinstance.com). Active development at [Lucineer/cocapn](https://github.com/Lucineer/cocapn).

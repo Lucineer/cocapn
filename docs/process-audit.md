@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-29
 **Auditor:** GLM-5.1 (DevOps/Release Manager persona)
-**Repo:** CedarBeach2019/cocapn @ bc6c6d5
+**Repo:** Lucineer/cocapn @ bc6c6d5
 
 ## Summary
 46 issues found across 6 categories. All Critical and High issues fixed.
@@ -27,7 +27,7 @@
 
 #### Documentation (3 Critical, 2 High)
 - [x] License mismatch (AGPL vs MIT) → All MIT now
-- [x] Wrong GitHub links → CedarBeach2019 consistently
+- [x] Wrong GitHub links → Lucineer consistently
 - [x] Port mismatch (8787 vs 3100) → README shows 3100
 - [x] Missing license in package.json → Added to 5 packages
 

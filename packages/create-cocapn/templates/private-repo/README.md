@@ -94,10 +94,10 @@ Add `.md` files to `cocapn/wiki/` for persistent knowledge:
 
 ## Learn More
 
-- [Cocapn Documentation](https://github.com/CedarBeach2019/cocapn)
-- [Architecture Guide](https://github.com/CedarBeach2019/cocapn/blob/main/docs/ARCHITECTURE.md)
-- [Verticals: DMlog, Fishinglog, Deckboss](https://github.com/CedarBeach2019/cocapn/tree/main/packages/templates)
+- [Cocapn Documentation](https://github.com/Lucineer/cocapn)
+- [Architecture Guide](https://github.com/Lucineer/cocapn/blob/main/docs/ARCHITECTURE.md)
+- [Verticals: DMlog, Fishinglog, Deckboss](https://github.com/Lucineer/cocapn/tree/main/packages/templates)
 
 ---
 
-*Powered by [Cocapn](https://github.com/CedarBeach2019/cocapn) — The repo IS the agent.*
+*Powered by [Cocapn](https://github.com/Lucineer/cocapn) — The repo IS the agent.*

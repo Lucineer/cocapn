@@ -7,7 +7,7 @@
 **Phases 0-12 Complete.** 1402 tests, 6 packages, 27 features, 1 live deployment.
 
 - Live: https://cocapn-agent.magnus-digennaro.workers.dev
-- Repo: github.com/CedarBeach2019/cocapn (superinstance/cocapn upstream)
+- Repo: github.com/Lucineer/cocapn (superinstance/cocapn upstream)
 - 13 design documents in docs/designs/
 
 ## Phase 13: Platform (Priority)

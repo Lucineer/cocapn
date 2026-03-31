@@ -1,6 +1,6 @@
 # CLAUDE.md — My Agent
 
-> This agent is powered by [Cocapn](https://github.com/CedarBeach2019/cocapn).
+> This agent is powered by [Cocapn](https://github.com/Lucineer/cocapn).
 
 ## Structure
 

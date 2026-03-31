@@ -1,6 +1,6 @@
 # {{name}}
 
-> AI Assistant powered by [Cocapn](https://github.com/CedarBeach2019/cocapn)
+> AI Assistant powered by [Cocapn](https://github.com/Lucineer/cocapn)
 
 Public-facing chat interface for the {{name}} agent.
 

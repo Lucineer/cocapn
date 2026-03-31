@@ -100,5 +100,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CONTRIBUTING.md, SECURITY.md
 - 104 test files, ~1500+ tests
 
-[0.2.0]: https://github.com/CedarBeach2019/cocapn/releases/tag/v0.2.0
-[0.1.0]: https://github.com/CedarBeach2019/cocapn/releases/tag/v0.1.0
+[0.2.0]: https://github.com/Lucineer/cocapn/releases/tag/v0.2.0
+[0.1.0]: https://github.com/Lucineer/cocapn/releases/tag/v0.1.0

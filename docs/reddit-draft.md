@@ -28,7 +28,7 @@ cocapn start
 
 **Live demo:** https://cocapn-agent.magnus-digennaro.workers.dev
 
-**GitHub:** https://github.com/CedarBeach2019/cocapn
+**GitHub:** https://github.com/Lucineer/cocapn
 
 119 commits, 104K lines of TypeScript, 125 test files, MIT license.
 

@@ -5,7 +5,7 @@ Get a running cocapn agent in under 5 minutes.
 ## One-Liner Install
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/CedarBeach2019/cocapn/main/docker-sandbox/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/Lucineer/cocapn/main/docker-sandbox/install.sh | bash
 ```
 
 This clones the repo, prompts for your API key, builds the image, and starts the container.
@@ -22,7 +22,7 @@ This clones the repo, prompts for your API key, builds the image, and starts the
 
 ```bash
 # 1. Clone the repo
-git clone --depth 1 https://github.com/CedarBeach2019/cocapn.git
+git clone --depth 1 https://github.com/Lucineer/cocapn.git
 cd cocapn/docker-sandbox
 
 # 2. Configure your API key

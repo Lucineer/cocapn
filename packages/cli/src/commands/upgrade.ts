@@ -155,7 +155,7 @@ export function checkForUpdates(): UpgradeCheckResult {
     current,
     latest,
     hasUpdate,
-    changelogUrl: `https://github.com/CedarBeach2019/cocapn/releases/tag/v${formatSemver(latest)}`,
+    changelogUrl: `https://github.com/Lucineer/cocapn/releases/tag/v${formatSemver(latest)}`,
   };
 }
 

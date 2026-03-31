@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-29
 **Auditor:** GLM-5.1 (Product Manager persona)
-**Repo:** CedarBeach2019/cocapn @ bc6c6d5
+**Repo:** Lucineer/cocapn @ bc6c6d5
 
 ## Grades (Before Fix → After Fix)
 

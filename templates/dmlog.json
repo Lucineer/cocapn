@@ -5,8 +5,8 @@
   "description": "TTRPG AI companion with dice rolling, NPC panel, character sheets, and draft comparison",
   "domains": ["dmlog.ai"],
   "emoji": "🏰",
-  "author": "CedarBeach2019",
-  "repository": "https://github.com/CedarBeach2019/dmlog-ai",
+  "author": "Lucineer",
+  "repository": "https://github.com/Lucineer/dmlog-ai",
   "features": ["dice-roller", "npc-panel", "character-stats", "draft-comparison"],
   "modules": ["cloud-module-pii", "cloud-module-router", "cloud-module-drafts"],
   "personality": {

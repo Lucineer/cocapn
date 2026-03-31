@@ -27,7 +27,7 @@ cocapn health               # Health check
 ## Quick Start
 
 ```bash
-git clone https://github.com/CedarBeach2019/cocapn.git
+git clone https://github.com/Lucineer/cocapn.git
 cd cocapn && npm install && npm run build
 cd packages/cli
 node bin/cocapn.js init ~/.cocapn

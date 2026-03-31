@@ -64,8 +64,8 @@ Pre-built personalities for different use cases:
 
 ## Links
 
-- **GitHub:** https://github.com/CedarBeach2019/cocapn
+- **GitHub:** https://github.com/Lucineer/cocapn
 - **Live Demo:** https://cocapn-agent.magnus-digennaro.workers.dev
-- **Docs:** https://github.com/CedarBeach2019/cocapn/tree/main/docs
+- **Docs:** https://github.com/Lucineer/cocapn/tree/main/docs
 
 Built by [Superinstance](https://superinstance.com).
