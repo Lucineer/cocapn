@@ -14,6 +14,7 @@
 import type { Soul } from './soul.js';
 import type { Memory, Message } from './memory.js';
 import type { Awareness } from './awareness.js';
+import type { Knowledge } from './knowledge.js';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
@@ -29,13 +30,14 @@ export interface ContextOptions {
   userMessage: string;
   reflectionSummary?: string;
   userId?: string;
+  knowledge?: Knowledge;
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────────
 
 /** Build a smart, budget-aware system prompt. */
 export function buildContext(opts: ContextOptions): string {
-  const { soul, memory, awareness, userMessage, reflectionSummary, userId } = opts;
+  const { soul, memory, awareness, userMessage, reflectionSummary, userId, knowledge } = opts;
   const sections: string[] = [];
   let used = 0;
 
@@ -70,6 +72,16 @@ export function buildContext(opts: ContextOptions): string {
     const factsText = `## What I Remember\n${relevantFacts.map(([k, v]) => `- ${k}: ${v}`).join('\n')}`;
     sections.push(factsText);
     used += factsText.length;
+  }
+
+  // 4b. Knowledge base — top 5 relevant entries
+  if (knowledge) {
+    const knowledgeEntries = knowledge.search(userMessage, 5);
+    if (knowledgeEntries.length > 0) {
+      const kText = `## Known facts about ${userMessage.split(/\W+/).filter(w => w.length > 3).slice(0, 3).join(' ')}\n${knowledgeEntries.map(e => `- [${e.type}] ${e.content}`).join('\n')}`;
+      sections.push(kText);
+      used += kText.length;
+    }
   }
 
   // 5. Recent messages (user-scoped if userId provided)
