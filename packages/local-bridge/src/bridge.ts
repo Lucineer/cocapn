@@ -59,6 +59,8 @@ import {
   logging,
   auth,
 } from "./middleware/index.js";
+import { MobileConnectionManager } from "./mobile/connection.js";
+import { MobileAPI } from "./mobile/api.js";
 
 // ─── AdmiralClient (optional import — avoids hard dep on cloud-agents pkg) ────
 
@@ -119,6 +121,8 @@ export class Bridge {
   private requestQueue:   RequestQueue;
   private modeSwitcher:   ModeSwitcher;
   private pipeline:       MiddlewarePipeline;
+  private mobileManager:  MobileConnectionManager;
+  private mobileAPI:      MobileAPI;
   private shuttingDown = false;
   private admiralInterval?: ReturnType<typeof setInterval>;
 
@@ -205,6 +209,16 @@ export class Bridge {
       this.spawner,
       this.cloudAdapters
     );
+
+    // Initialize mobile connection layer
+    this.mobileManager = new MobileConnectionManager({
+      agentName: this.config.soul ?? "cocapn",
+    });
+    this.mobileAPI = new MobileAPI({
+      manager: this.mobileManager,
+      host: "localhost",
+      port: this.config.config.port,
+    });
 
     this.server = new BridgeServer({
       config:         this.config,
@@ -305,6 +319,10 @@ export class Bridge {
 
     this.server.start();
 
+    // Start mobile connection manager
+    this.mobileManager.start();
+    console.info("[bridge] Mobile connection layer active");
+
     // ── auto-publisher integration ───────────────────────────────────────────
     const publisherMod = this.modules.get("auto-publisher");
     if (publisherMod?.status === "enabled") {
@@ -399,6 +417,9 @@ export class Bridge {
     this.sync.stopTimers();
     await this.watcher.stop();
 
+    // 2b. Stop mobile connection manager
+    this.mobileManager.stop();
+
     // 3. Flush brain — ensure any held lock is released
     this.flushBrain();
 
@@ -484,6 +505,8 @@ export class Bridge {
   getTelemetry():   Telemetry            { return this.telemetry; }
   getRequestQueue(): RequestQueue        { return this.requestQueue; }
   getPipeline():    MiddlewarePipeline   { return this.pipeline; }
+  getMobileManager(): MobileConnectionManager { return this.mobileManager; }
+  getMobileAPI():   MobileAPI            { return this.mobileAPI; }
 
   // ---------------------------------------------------------------------------
   // LLM initialization

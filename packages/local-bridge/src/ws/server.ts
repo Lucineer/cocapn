@@ -451,6 +451,19 @@ export class BridgeServer extends EventEmitter<BridgeServerEventMap> {
       return;
     }
 
+    // Handle mobile API endpoints
+    if (url.startsWith('/api/mobile/')) {
+      const bridge = this.options.bridge as any;
+      if (bridge?.getMobileAPI) {
+        const mobileAPI = bridge.getMobileAPI() as import('../mobile/api.js').MobileAPI;
+        const handled = await mobileAPI.handleRequest(req, res);
+        if (handled) return;
+      }
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Mobile API not available' }));
+      return;
+    }
+
     // Handle A2A peer endpoints
     await handleHttpPeerRequest(req, res, this.handlerCtx);
   }
