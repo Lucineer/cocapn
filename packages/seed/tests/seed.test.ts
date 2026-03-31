@@ -2198,3 +2198,409 @@ describe('Knowledge in Context', () => {
     expect(matches.length).toBeLessThanOrEqual(5);
   });
 });
+
+// ─── Intelligence Tests ────────────────────────────────────────────────────
+
+import * as intelMod from '../src/intelligence.ts';
+import * as mcpMod from '../src/mcp.ts';
+import * as researchMod from '../src/research.ts';
+
+describe('Intelligence — getFileContext', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = join(tmpdir(), `cocapn-intel-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'app.ts'), 'import { helper } from "./helper.js";\nconst x = helper();\n');
+    writeFileSync(join(dir, 'helper.ts'), 'export function helper() { return 42; }\n');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email test@test.com', { cwd: dir });
+    execSync('git config user.name Test', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m "init: add app and helper"', { cwd: dir, timeout: 5000 });
+  });
+  afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  it('returns file content', () => {
+    const ctx = intelMod.getFileContext(dir, 'app.ts');
+    expect(ctx.content).toContain('import');
+    expect(ctx.content).toContain('helper');
+  });
+
+  it('returns git history for file', () => {
+    const ctx = intelMod.getFileContext(dir, 'app.ts');
+    expect(ctx.log.length).toBeGreaterThan(0);
+    expect(ctx.log[0].msg).toContain('init');
+  });
+
+  it('detects imports', () => {
+    const ctx = intelMod.getFileContext(dir, 'app.ts');
+    expect(ctx.imports).toContain('./helper.js');
+  });
+
+  it('detects importers (reverse dependencies)', () => {
+    const ctx = intelMod.getFileContext(dir, 'helper.ts');
+    expect(ctx.importedBy).toContain('app.ts');
+  });
+
+  it('returns empty for nonexistent file', () => {
+    const ctx = intelMod.getFileContext(dir, 'nonexistent.ts');
+    expect(ctx.content).toBe('');
+    expect(ctx.log).toEqual([]);
+  });
+
+  it('returns correct path', () => {
+    const ctx = intelMod.getFileContext(dir, 'app.ts');
+    expect(ctx.path).toBe('app.ts');
+  });
+});
+
+describe('Intelligence — assessImpact', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = join(tmpdir(), `cocapn-impact-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'core.ts'), 'export const core = "core";\n');
+    writeFileSync(join(dir, 'a.ts'), 'import { core } from "./core.js";\n');
+    writeFileSync(join(dir, 'b.ts'), 'import { core } from "./core.js";\n');
+    writeFileSync(join(dir, 'c.ts'), 'import { core } from "./core.js";\n');
+    writeFileSync(join(dir, 'd.ts'), 'import { core } from "./core.js";\n');
+    writeFileSync(join(dir, 'e.ts'), 'import { core } from "./core.js";\n');
+    writeFileSync(join(dir, 'f.ts'), 'import { core } from "./core.js";\n');
+    writeFileSync(join(dir, 'g.ts'), 'import { core } from "./core.js";\n');
+    writeFileSync(join(dir, 'h.ts'), 'import { core } from "./core.js";\n');
+    writeFileSync(join(dir, 'i.ts'), 'import { core } from "./core.js";\n');
+    writeFileSync(join(dir, 'j.ts'), 'import { core } from "./core.js";\n');
+    writeFileSync(join(dir, 'k.ts'), 'import { core } from "./core.js";\n');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email test@test.com', { cwd: dir });
+    execSync('git config user.name Test', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m "init"', { cwd: dir, timeout: 5000 });
+  });
+  afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  it('counts dependents', () => {
+    const impact = intelMod.assessImpact(dir, 'core.ts');
+    expect(impact.dependents.length).toBe(11);
+  });
+
+  it('assesses risk as high for many dependents', () => {
+    const impact = intelMod.assessImpact(dir, 'core.ts');
+    expect(impact.risk).toBe('high');
+  });
+
+  it('assesses risk as low for isolated file', () => {
+    const impact = intelMod.assessImpact(dir, 'a.ts');
+    expect(impact.risk).toBe('low');
+  });
+
+  it('includes dependencies', () => {
+    const impact = intelMod.assessImpact(dir, 'a.ts');
+    expect(impact.dependencies).toContain('./core.js');
+  });
+
+  it('counts recent changes', () => {
+    const impact = intelMod.assessImpact(dir, 'core.ts');
+    expect(impact.recentChanges).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns correct path', () => {
+    const impact = intelMod.assessImpact(dir, 'core.ts');
+    expect(impact.path).toBe('core.ts');
+  });
+});
+
+describe('Intelligence — getHistory', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = join(tmpdir(), `cocapn-hist-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'app.ts'), 'const x = 1;\n');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email test@test.com', { cwd: dir });
+    execSync('git config user.name Test', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m "feat: add authentication module"', { cwd: dir, timeout: 5000 });
+  });
+  afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  it('finds commits matching topic', () => {
+    const entries = intelMod.getHistory(dir, 'authentication');
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries[0].msg).toContain('authentication');
+  });
+
+  it('returns empty for non-matching topic', () => {
+    const entries = intelMod.getHistory(dir, 'nonexistent-topic-xyz');
+    expect(entries).toEqual([]);
+  });
+
+  it('includes commit metadata', () => {
+    const entries = intelMod.getHistory(dir, 'authentication');
+    expect(entries[0].hash).toBeTruthy();
+    expect(entries[0].date).toBeTruthy();
+    expect(entries[0].author).toBe('Test');
+  });
+
+  it('includes affected files', () => {
+    const entries = intelMod.getHistory(dir, 'authentication');
+    expect(entries[0].files).toContain('app.ts');
+  });
+});
+
+describe('Intelligence — LLM synthesis', () => {
+  it('explainCode returns LLM response', async () => {
+    const mockLlm = {
+      async chat() { return { content: 'This uses a strategy pattern because...' }; },
+    };
+    const dir = join(tmpdir(), `cocapn-explain-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'auth.ts'), 'export function auth() {}');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email t@t.com', { cwd: dir });
+    execSync('git config user.name T', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m "add auth"', { cwd: dir, timeout: 5000 });
+    const result = await intelMod.explainCode(mockLlm as any, dir, 'auth.ts', 'why?');
+    expect(result).toContain('strategy pattern');
+    try { rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  it('generateClaudeMd returns LLM response', async () => {
+    const mockLlm = {
+      async chat() { return { content: '# CLAUDE.md\n\nThis project uses event sourcing...' }; },
+    };
+    const dir = join(tmpdir(), `cocapn-claudemd-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'app.ts'), 'const x = 1;');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email t@t.com', { cwd: dir });
+    execSync('git config user.name T', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m "init"', { cwd: dir, timeout: 5000 });
+    const result = await intelMod.generateClaudeMd(mockLlm as any, dir);
+    expect(result).toContain('event sourcing');
+    try { rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  it('generateWiki returns parsed JSON or fallback', async () => {
+    const mockLlm = {
+      async chat() { return { content: '[{"title":"Architecture","content":"Uses modules."}]' }; },
+    };
+    const dir = join(tmpdir(), `cocapn-wiki-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'app.ts'), 'const x = 1;');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email t@t.com', { cwd: dir });
+    execSync('git config user.name T', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m "init"', { cwd: dir, timeout: 5000 });
+    const pages = await intelMod.generateWiki(mockLlm as any, dir);
+    expect(pages.length).toBeGreaterThan(0);
+    expect(pages[0].title).toBe('Architecture');
+    try { rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  it('generateWiki falls back on invalid JSON', async () => {
+    const mockLlm = {
+      async chat() { return { content: 'This is not JSON' }; },
+    };
+    const dir = join(tmpdir(), `cocapn-wikifb-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'app.ts'), 'const x = 1;');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email t@t.com', { cwd: dir });
+    execSync('git config user.name T', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m "init"', { cwd: dir, timeout: 5000 });
+    const pages = await intelMod.generateWiki(mockLlm as any, dir);
+    expect(pages.length).toBe(1);
+    expect(pages[0].title).toBe('Overview');
+    try { rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+});
+
+// ─── MCP Tests ─────────────────────────────────────────────────────────────
+
+describe('MCP — tool definitions', () => {
+  it('startMcpServer is exported as function', () => {
+    expect(typeof mcpMod.startMcpServer).toBe('function');
+  });
+
+  it('TOOL definitions are correct shape', async () => {
+    // We can't easily test stdin/stdout MCP server, but we verify the module loads
+    const mcpContent = readFileSync(join(import.meta.dirname ?? '.', '..', 'src', 'mcp.ts'), 'utf-8');
+    expect(mcpContent).toContain('cocapn_explain');
+    expect(mcpContent).toContain('cocapn_context');
+    expect(mcpContent).toContain('cocapn_impact');
+    expect(mcpContent).toContain('cocapn_history');
+    expect(mcpContent).toContain('cocapn_suggest');
+    expect(mcpContent).toContain('tools/list');
+    expect(mcpContent).toContain('tools/call');
+    expect(mcpContent).toContain('initialize');
+  });
+
+  it('module handles JSON-RPC 2.0', () => {
+    const mcpContent = readFileSync(join(import.meta.dirname ?? '.', '..', 'src', 'mcp.ts'), 'utf-8');
+    expect(mcpContent).toContain('jsonrpc');
+    expect(mcpContent).toContain('2.0');
+  });
+});
+
+// ─── Research Tests ────────────────────────────────────────────────────────
+
+describe('Research — discoverTopics', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = join(tmpdir(), `cocapn-resdisc-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'app.ts'), '// TODO: refactor auth module\nconst x = 1;\n// FIXME: memory leak in handler\n');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email t@t.com', { cwd: dir });
+    execSync('git config user.name T', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m "feat: initial commit with todos"', { cwd: dir, timeout: 5000 });
+  });
+  afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  it('discovers topics from TODO comments', () => {
+    const topics = researchMod.discoverTopics(dir);
+    expect(topics.some(t => t.toLowerCase().includes('refactor'))).toBe(true);
+  });
+
+  it('discovers topics from FIXME comments', () => {
+    const topics = researchMod.discoverTopics(dir);
+    expect(topics.some(t => t.toLowerCase().includes('memory'))).toBe(true);
+  });
+
+  it('discovers topics from commit messages', () => {
+    const topics = researchMod.discoverTopics(dir);
+    expect(topics.some(t => t.includes('initial'))).toBe(true);
+  });
+
+  it('returns at most 20 topics', () => {
+    const topics = researchMod.discoverTopics(dir);
+    expect(topics.length).toBeLessThanOrEqual(20);
+  });
+});
+
+describe('Research — discoverTopics with docs', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = join(tmpdir(), `cocapn-resdoc-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    mkdirSync(join(dir, 'docs'), { recursive: true });
+    writeFileSync(join(dir, 'docs', 'architecture.md'), '# System Architecture\n\nDetails here.');
+    writeFileSync(join(dir, 'app.ts'), 'const x = 1;');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email t@t.com', { cwd: dir });
+    execSync('git config user.name T', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m "init"', { cwd: dir, timeout: 5000 });
+  });
+  afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  it('discovers topics from doc headings', () => {
+    const topics = researchMod.discoverTopics(dir);
+    expect(topics.some(t => t.includes('System Architecture'))).toBe(true);
+  });
+});
+
+describe('Research — saveResearch and loadResearch', () => {
+  let dir: string;
+  beforeEach(() => { dir = join(tmpdir(), `cocapn-ressave-${uid()}`); mkdirSync(dir, { recursive: true }); });
+  afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  it('saves research to .cocapn/research/', () => {
+    const path = researchMod.saveResearch(dir, 'Event Sourcing', 'Event sourcing is...', ['commit-a', 'commit-b']);
+    expect(existsSync(path)).toBe(true);
+    expect(path).toContain('.cocapn/research');
+    expect(path).toContain('event-sourcing');
+  });
+
+  it('saved research has correct format', () => {
+    researchMod.saveResearch(dir, 'Auth Module', 'Auth analysis content', []);
+    const content = researchMod.loadResearch(dir, 'auth-module');
+    expect(content).toBeTruthy();
+    expect(content!).toContain('# Auth Module');
+    expect(content!).toContain('Generated:');
+    expect(content!).toContain('Auth analysis content');
+  });
+
+  it('listResearch returns saved entries', () => {
+    researchMod.saveResearch(dir, 'Testing Strategy', 'Content here', ['test.ts']);
+    const list = researchMod.listResearch(dir);
+    expect(list.length).toBe(1);
+    expect(list[0].topic).toBe('Testing Strategy');
+  });
+
+  it('loadResearch returns null for missing slug', () => {
+    expect(researchMod.loadResearch(dir, 'nonexistent')).toBeNull();
+  });
+
+  it('listResearch returns empty when no research', () => {
+    expect(researchMod.listResearch(dir)).toEqual([]);
+  });
+
+  it('overwrites existing research with same slug', () => {
+    researchMod.saveResearch(dir, 'Auth', 'Version 1', []);
+    researchMod.saveResearch(dir, 'Auth', 'Version 2', []);
+    const content = researchMod.loadResearch(dir, 'auth');
+    expect(content).toContain('Version 2');
+    expect(content).not.toContain('Version 1');
+  });
+});
+
+describe('Research — researchTopic', () => {
+  it('returns research result from LLM', async () => {
+    const mockLlm = {
+      async chat() { return { content: 'Deep analysis of the auth module...' }; },
+    };
+    const dir = join(tmpdir(), `cocapn-resgen-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'auth.ts'), 'export function auth() {}');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email t@t.com', { cwd: dir });
+    execSync('git config user.name T', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m "add auth module"', { cwd: dir, timeout: 5000 });
+    const result = await researchMod.researchTopic(mockLlm as any, dir, 'auth');
+    expect(result.topic).toBe('auth');
+    expect(result.content).toContain('Deep analysis');
+    try { rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+
+  it('returns sources from grep', async () => {
+    const mockLlm = {
+      async chat() { return { content: 'Analysis...' }; },
+    };
+    const dir = join(tmpdir(), `cocapn-ressrc-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'auth.ts'), '// authentication logic\nexport function auth() {}');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email t@t.com', { cwd: dir });
+    execSync('git config user.name T', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m "add auth"', { cwd: dir, timeout: 5000 });
+    const result = await researchMod.researchTopic(mockLlm as any, dir, 'authentication');
+    expect(result.sources).toContain('auth.ts');
+    try { rmSync(dir, { recursive: true, force: true }); } catch {}
+  });
+});
+
+// ─── CLI --mcp flag Tests ──────────────────────────────────────────────────
+
+describe('CLI --mcp flag', () => {
+  const seedDir = join(import.meta.dirname ?? '.', '..');
+
+  it('index.ts imports MCP server module', () => {
+    const content = readFileSync(join(seedDir, 'src', 'index.ts'), 'utf-8');
+    expect(content).toContain('startMcpServer');
+    expect(content).toContain('--mcp');
+  });
+
+  it('index.ts has mcp option in parseArgs', () => {
+    const content = readFileSync(join(seedDir, 'src', 'index.ts'), 'utf-8');
+    expect(content).toMatch(/mcp:\s*\{[^}]*type:\s*['"]boolean['"]/);
+  });
+});
