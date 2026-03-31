@@ -2,10 +2,16 @@
 <html lang="en" data-mode="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>__AGENT_NAME__</title>
+<meta name="description" content="The repo IS the agent. Chat with your codebase.">
+<meta name="theme-color" content="#0a0a0c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="__AGENT_NAME__">
+<link rel="manifest" href="/manifest.json">
 <style>
-:root{--accent:#3b82f6;--accent2:#2563eb;--radius:14px;--mono:'SF Mono',SFMono-Regular,Consolas,monospace;--glow:rgba(59,130,246,.12)}
+:root{--accent:#3b82f6;--accent2:#2563eb;--radius:14px;--mono:'SF Mono',SFMono-Regular,Consolas,monospace;--glow:rgba(59,130,246,.12);--panel-w:280px}
 /*__THEME__*/
 [data-mode="dark"]{--bg:#0a0a0c;--surface:#111114;--border:#1e1e23;--text:#e4e4e7;--muted:#71717a;--user-bg:var(--accent);--bot-bg:#16161a;--user-text:#fff;--glow:rgba(59,130,246,.12)}
 [data-mode="light"]{--bg:#fafafa;--surface:#fff;--border:#e5e5e5;--text:#18181b;--muted:#71717a;--user-bg:#3b82f6;--bot-bg:#f4f4f5;--user-text:#fff;--glow:rgba(59,130,246,.06)}
@@ -26,7 +32,8 @@ header{padding:10px 16px;background:var(--surface);border-bottom:1px solid var(-
 .ibtn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .15s}
 .ibtn:hover{background:var(--border);color:var(--text)}
 .ibtn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
-main{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative}
+.layout{flex:1;display:flex;overflow:hidden}
+main{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative;min-width:0}
 #empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center;padding:40px 20px;animation:fadeUp .5s ease}
 .empty-icon{position:relative;margin-bottom:24px}
 .empty-glow{width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,var(--glow),transparent 70%);position:absolute;top:-20px;left:-20px}
@@ -65,10 +72,6 @@ main{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative
 .typing span{width:7px;height:7px;background:var(--muted);border-radius:50%;animation:bounce .6s ease-in-out infinite}
 .typing span:nth-child(2){animation-delay:.1s}.typing span:nth-child(3){animation-delay:.2s}
 @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
-.skeleton{padding:12px 14px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bot-bg);max-width:280px}
-.sk-line{height:12px;background:var(--border);border-radius:4px;margin-bottom:8px;animation:shimmer 1.5s ease-in-out infinite}
-.sk-line:last-child{margin-bottom:0;width:60%}
-@keyframes shimmer{0%,100%{opacity:.3}50%{opacity:.7}}
 #input-area{padding:12px 16px 10px;background:var(--surface);border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end;flex-shrink:0}
 .input-wrap{flex:1;position:relative}
 #input{width:100%;padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:13.5px;outline:none;transition:border-color .2s,box-shadow .2s;resize:none;min-height:42px;max-height:140px;line-height:1.5}
@@ -103,6 +106,27 @@ main{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative
 .sc-list{font-size:12px;color:var(--muted);line-height:2.4}
 .sc-list kbd{background:var(--border);padding:2px 7px;border-radius:4px;font-size:11px;font-family:var(--mono)}
 footer{padding:5px 16px;font-size:10px;color:var(--muted);text-align:center;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0;letter-spacing:.3px}
+/* Repo browser panel */
+#repo-panel{width:0;overflow:hidden;background:var(--surface);border-right:1px solid var(--border);transition:width .3s cubic-bezier(.4,0,.2,1);flex-shrink:0;display:flex;flex-direction:column}
+#repo-panel.open{width:var(--panel-w)}
+.repo-hdr{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;flex-shrink:0}
+.repo-tree{flex:1;overflow-y:auto;padding:8px 0}
+.repo-tree::-webkit-scrollbar{width:3px}
+.repo-tree::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.ftree-item{display:flex;align-items:center;gap:6px;padding:4px 14px;font-size:12px;cursor:pointer;color:var(--text);transition:background .1s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ftree-item:hover{background:var(--border)}
+.ftree-item.active{background:var(--accent);color:#fff;border-radius:0 6px 6px 0}
+.ftree-icon{font-size:11px;flex-shrink:0;opacity:.6}
+.ftree-dir{color:var(--accent);font-weight:600}
+#file-viewer{display:none;border-top:1px solid var(--border);background:var(--bg);flex-shrink:0;max-height:50%}
+#file-viewer.open{display:flex;flex-direction:column}
+.file-hdr{padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);flex-shrink:0}
+.file-hdr span{font-family:var(--mono)}
+.file-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px}
+.file-close:hover{color:var(--text)}
+.file-body{flex:1;overflow:auto;padding:10px 14px;font-family:var(--mono);font-size:11.5px;line-height:1.65;white-space:pre;color:var(--text);tab-size:2}
+.install-banner{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:10px 20px;border-radius:12px;font-size:13px;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.3);z-index:25;display:none;transition:opacity .3s}
+.install-banner.show{display:block}
 @media(max-width:600px){
   #messages{padding:12px 10px}
   #input-area{padding:8px 10px}
@@ -110,6 +134,7 @@ footer{padding:5px 16px;font-size:10px;color:var(--muted);text-align:center;back
   .sidebar{width:100%;right:-100%}
   footer{display:none}
   .help-box{width:95%}
+  #repo-panel.open{width:100%;position:fixed;inset:0;z-index:10}
 }
 </style>
 </head>
@@ -123,28 +148,39 @@ footer{padding:5px 16px;font-size:10px;color:var(--muted);text-align:center;back
   </div>
   <div class="hdr-actions">
     <span class="badge" id="mem-count"></span>
+    <button class="ibtn" id="files-btn" onclick="toggleRepoPanel()" title="Toggle files">📁</button>
     <button class="ibtn" id="sound-btn" onclick="toggleSound()" title="Toggle sound">🔕</button>
     <button class="ibtn" onclick="toggleMode()" title="Toggle theme">🌓</button>
     <button class="ibtn" onclick="toggleSidebar()" title="Info (Ctrl+/)">☰</button>
   </div>
 </header>
-<main>
-  <div id="empty-state">
-    <div class="empty-icon">
-      <div class="empty-glow"></div>
-      <svg width="80" height="80" viewBox="0 0 80 80" fill="none" style="position:relative">
-        <rect x="10" y="8" width="60" height="44" rx="14" stroke="var(--accent)" stroke-width="1.5" fill="var(--accent)" fill-opacity=".06"/>
-        <circle cx="27" cy="30" r="3.5" fill="var(--accent)" opacity=".5"><animate attributeName="opacity" values=".3;.8;.3" dur="1.8s" repeatCount="indefinite"/></circle>
-        <circle cx="40" cy="30" r="3.5" fill="var(--accent)" opacity=".5"><animate attributeName="opacity" values=".3;.8;.3" dur="1.8s" begin=".2s" repeatCount="indefinite"/></circle>
-        <circle cx="53" cy="30" r="3.5" fill="var(--accent)" opacity=".5"><animate attributeName="opacity" values=".3;.8;.3" dur="1.8s" begin=".4s" repeatCount="indefinite"/></circle>
-        <path d="M22 52L16 66L30 56" stroke="var(--accent)" stroke-width="1.5" fill="var(--accent)" fill-opacity=".06" stroke-linejoin="round"/>
-      </svg>
+<div class="layout">
+  <div id="repo-panel">
+    <div class="repo-hdr"><span>Files</span><span id="file-count"></span></div>
+    <div class="repo-tree" id="file-tree"></div>
+    <div id="file-viewer">
+      <div class="file-hdr"><span id="file-name"></span><button class="file-close" onclick="closeFile()">&times;</button></div>
+      <pre class="file-body" id="file-body"></pre>
     </div>
-    <h2>Start a conversation</h2>
-    <p id="empty-hint">Type a message below to begin chatting.</p>
   </div>
-  <div id="messages"></div>
-</main>
+  <main>
+    <div id="empty-state">
+      <div class="empty-icon">
+        <div class="empty-glow"></div>
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" style="position:relative">
+          <rect x="10" y="8" width="60" height="44" rx="14" stroke="var(--accent)" stroke-width="1.5" fill="var(--accent)" fill-opacity=".06"/>
+          <circle cx="27" cy="30" r="3.5" fill="var(--accent)" opacity=".5"><animate attributeName="opacity" values=".3;.8;.3" dur="1.8s" repeatCount="indefinite"/></circle>
+          <circle cx="40" cy="30" r="3.5" fill="var(--accent)" opacity=".5"><animate attributeName="opacity" values=".3;.8;.3" dur="1.8s" begin=".2s" repeatCount="indefinite"/></circle>
+          <circle cx="53" cy="30" r="3.5" fill="var(--accent)" opacity=".5"><animate attributeName="opacity" values=".3;.8;.3" dur="1.8s" begin=".4s" repeatCount="indefinite"/></circle>
+          <path d="M22 52L16 66L30 56" stroke="var(--accent)" stroke-width="1.5" fill="var(--accent)" fill-opacity=".06" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h2>Start a conversation</h2>
+      <p id="empty-hint">Type a message below to begin chatting.</p>
+    </div>
+    <div id="messages"></div>
+  </main>
+</div>
 <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
 <aside class="sidebar" id="sidebar">
   <button class="close" onclick="toggleSidebar()">&times;</button>
@@ -156,11 +192,12 @@ footer{padding:5px 16px;font-size:10px;color:var(--muted);text-align:center;back
   <h3>Commands</h3>
   <div class="cmd-list">
     <span><kbd>Ctrl+/</kbd> Keyboard shortcuts</span>
+    <span><kbd>Ctrl+E</kbd> Toggle file browser</span>
     <span><kbd>Esc</kbd> Close sidebar</span>
     <span>/whoami — full self-perception</span>
     <span>/memory — show memories</span>
     <span>/git log — recent commits</span>
-    <span>/git stats — repo statistics</span>
+    <span>/analytics — usage stats</span>
     <span>/clear — clear chat</span>
   </div>
   <h3>Connected Agents</h3>
@@ -174,6 +211,7 @@ footer{padding:5px 16px;font-size:10px;color:var(--muted);text-align:center;back
       <div><kbd>Enter</kbd> Send message</div>
       <div><kbd>Shift+Enter</kbd> New line</div>
       <div><kbd>Ctrl+/</kbd> Show shortcuts</div>
+      <div><kbd>Ctrl+E</kbd> Toggle file browser</div>
       <div><kbd>Esc</kbd> Close sidebar / help</div>
     </div>
   </div>
@@ -186,10 +224,16 @@ footer{padding:5px 16px;font-size:10px;color:var(--muted);text-align:center;back
   <button class="send-btn" id="send" title="Send (Enter)">↑</button>
 </div>
 <footer>Powered by <strong>cocapn</strong> · the repo IS the agent</footer>
+<div class="install-banner" id="install-banner" onclick="installApp()">Install app</div>
 <script>
 const $=s=>document.querySelector(s);
 const msgs=$('#messages'),input=$('#input'),sendBtn=$('#send'),empty=$('#empty-state'),cc=$('#char-count');
-let busy=false,avatar='__AGENT_AVATAR__',msgN=0,soundOn=false,audioCtx=null;
+let busy=false,avatar='__AGENT_AVATAR__',msgN=0,soundOn=false,audioCtx=null,filesLoaded=false,deferredPrompt=null;
+
+// PWA install prompt
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('#install-banner').classList.add('show');});
+function installApp(){if(!deferredPrompt)return;deferredPrompt.prompt();deferredPrompt.userChoice.then(()=>{$('#install-banner').classList.remove('show');deferredPrompt=null;});}
+if('serviceWorker' in navigator)navigator.registerServiceWorker?.('/sw.js')?.catch(()=>{});
 
 function beep(){
   if(!soundOn)return;
@@ -236,6 +280,7 @@ input.oninput=()=>{
     $('#empty-hint').textContent='Ready. Type a message to begin.';
   }
   const n=localStorage.getItem('cocapn-username');if(n)$('#user-name').value=n;
+  if(localStorage.getItem('cocapn-files')==='1')toggleRepoPanel(true);
 })();
 function toggleMode(){
   const h=document.documentElement;
@@ -271,6 +316,62 @@ async function loadPeers(){
 function saveUserName(){const n=$('#user-name').value.trim();if(n)localStorage.setItem('cocapn-username',n);}
 function toggleHelp(){$('#help-modal').classList.toggle('on');}
 function esc(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML}
+
+// Repo browser
+async function toggleRepoPanel(init){
+  const panel=$('#repo-panel'),open=init||!panel.classList.contains('open');
+  panel.classList.toggle('open',open);
+  $('#files-btn').classList.toggle('on',open);
+  localStorage.setItem('cocapn-files',open?'1':'0');
+  if(open&&!filesLoaded)await loadFiles();
+}
+async function loadFiles(){
+  try{
+    const r=await fetch('/api/files');if(!r.ok)return;
+    const files=await r.json();
+    $('#file-count').textContent=files.length+' files';
+    const tree=$('#file-tree');tree.innerHTML='';
+    const dirs={};
+    files.sort().forEach(f=>{
+      const parts=f.split('/'),dir=parts.length>1?parts.slice(0,-1).join('/'):'.';
+      if(!dirs[dir])dirs[dir]=[];
+      dirs[dir].push(f);
+    });
+    Object.keys(dirs).sort().forEach(dir=>{
+      if(dir!=='.'){
+        const d=document.createElement('div');d.className='ftree-item ftree-dir';
+        d.innerHTML=`<span class="ftree-icon">📂</span>${esc(dir)}`;tree.appendChild(d);
+      }
+      dirs[dir].forEach(f=>{
+        const name=f.split('/').pop(),ext=name.split('.').pop();
+        const icon={ts:'🟦',js:'🟨',json:'📋',md:'📝',css:'🎨',html:'🌐',py:'🐍',yml:'⚙️',yaml:'⚙️'}[ext]||'📄';
+        const el=document.createElement('div');el.className='ftree-item';
+        el.innerHTML=`<span class="ftree-icon">${icon}</span>${esc(name)}`;
+        el.title=f;el.dataset.path=f;
+        el.onclick=()=>viewFile(f);
+        tree.appendChild(el);
+      });
+    });
+    filesLoaded=true;
+  }catch{}
+}
+async function viewFile(path){
+  document.querySelectorAll('.ftree-item.active').forEach(e=>e.classList.remove('active'));
+  const item=document.querySelector(`.ftree-item[data-path="${CSS.escape(path)}"]`);
+  if(item)item.classList.add('active');
+  try{
+    const r=await fetch('/api/files/'+encodeURIComponent(path));
+    if(!r.ok)return;
+    const data=await r.json();
+    $('#file-name').textContent=path;
+    $('#file-body').textContent=typeof data.content==='string'?data.content:JSON.stringify(data,null,2);
+    $('#file-viewer').classList.add('open');
+  }catch{}
+}
+function closeFile(){
+  $('#file-viewer').classList.remove('open');
+  document.querySelectorAll('.ftree-item.active').forEach(e=>e.classList.remove('active'));
+}
 
 function hl(code){
   let h=code;
@@ -331,6 +432,19 @@ setInterval(()=>{document.querySelectorAll('.ts[data-t]').forEach(el=>{el.textCo
 async function send(){
   const text=input.value.trim();if(!text||busy)return;
   input.value='';cc.textContent='';input.style.height='auto';busy=true;sendBtn.disabled=true;
+  // Handle slash commands
+  if(text.startsWith('/analytics')){
+    try{
+      const r=await fetch('/api/analytics');if(!r.ok)throw 0;
+      const d=await r.json();
+      addMsg('user',text);
+      let out=`Messages: ${d.total}\nAvg response: ${d.avgResponseMs}ms`;
+      if(d.topTopics?.length)out+='\nTopics: '+d.topTopics.join(', ');
+      if(d.daily?.length){const last=d.daily[d.daily.length-1];out+=`\nToday (${last.date}): ${last.messages} msgs, ${last.avgDuration}ms avg`;}
+      addMsg('assistant',out);
+    }catch{addMsg('assistant','Error loading analytics.');}
+    busy=false;sendBtn.disabled=false;input.focus();return;
+  }
   const t0=Date.now();addMsg('user',text);showTyping();
   const userName=$('#user-name').value.trim()||undefined;
   try{
@@ -361,8 +475,10 @@ document.onkeydown=e=>{
   if(e.key==='Escape'){
     if($('#help-modal').classList.contains('on'))toggleHelp();
     else if($('#sidebar').classList.contains('open'))toggleSidebar();
+    else if($('#repo-panel').classList.contains('open'))toggleRepoPanel();
   }
   if(e.ctrlKey&&e.key==='/'){e.preventDefault();toggleHelp();}
+  if(e.ctrlKey&&e.key==='e'){e.preventDefault();toggleRepoPanel();}
 };
 </script>
 </body>

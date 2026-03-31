@@ -1,0 +1,160 @@
+[
+  {
+    "type": "message",
+    "ts": "2026-03-31T17:51:18.926Z",
+    "user": "9ca67895-6fa1-4dc7-9809-c310b05a6e76"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:51:19.085Z",
+    "user": "9ca67895-6fa1-4dc7-9809-c310b05a6e76",
+    "duration": 159
+  },
+  {
+    "type": "message",
+    "ts": "2026-03-31T17:51:19.117Z",
+    "user": "a97fd4c6-e797-4d5f-b9f3-86008d7bad2c"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:51:19.122Z",
+    "user": "a97fd4c6-e797-4d5f-b9f3-86008d7bad2c",
+    "duration": 5
+  },
+  {
+    "type": "message",
+    "ts": "2026-03-31T17:51:22.861Z",
+    "user": "f4533ef5-56e5-4284-8da5-829dcc98a9bf"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:51:22.995Z",
+    "user": "f4533ef5-56e5-4284-8da5-829dcc98a9bf",
+    "duration": 134
+  },
+  {
+    "type": "message",
+    "ts": "2026-03-31T17:51:23.368Z",
+    "user": "abddb125-e593-43bf-95db-20158a5b4f61"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:51:23.369Z",
+    "user": "abddb125-e593-43bf-95db-20158a5b4f61",
+    "duration": 1
+  },
+  {
+    "type": "message",
+    "ts": "2026-03-31T17:51:27.759Z",
+    "user": "2f69a90b-1138-4fc3-af40-50a9c74b6a03"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:51:27.852Z",
+    "user": "2f69a90b-1138-4fc3-af40-50a9c74b6a03",
+    "duration": 93
+  },
+  {
+    "type": "message",
+    "ts": "2026-03-31T17:51:28.440Z",
+    "user": "7c985fa7-4f16-4769-8776-ab2f9017a9c3"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:51:28.545Z",
+    "user": "7c985fa7-4f16-4769-8776-ab2f9017a9c3",
+    "duration": 105
+  },
+  {
+    "type": "message",
+    "ts": "2026-03-31T17:51:28.879Z",
+    "user": "ed3882f9-ffc5-4ec5-b8b5-1ac31158ba18"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:51:29.012Z",
+    "user": "ed3882f9-ffc5-4ec5-b8b5-1ac31158ba18",
+    "duration": 133
+  },
+  {
+    "type": "message",
+    "ts": "2026-03-31T17:51:29.315Z",
+    "user": "67ffb257-9ebd-4299-a719-55d0ff56aa96"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:51:29.436Z",
+    "user": "67ffb257-9ebd-4299-a719-55d0ff56aa96",
+    "duration": 121
+  },
+  {
+    "type": "message",
+    "ts": "2026-03-31T17:51:29.444Z",
+    "user": "30c2699c-7758-416e-b78d-86a85ecf0819"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:51:29.548Z",
+    "user": "30c2699c-7758-416e-b78d-86a85ecf0819",
+    "duration": 104
+  },
+  {
+    "type": "message",
+    "ts": "2026-03-31T17:51:29.867Z",
+    "user": "7d2b71cf-09e0-40be-9574-807a510d2314"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:51:29.974Z",
+    "user": "7d2b71cf-09e0-40be-9574-807a510d2314",
+    "duration": 107
+  },
+  {
+    "type": "message",
+    "ts": "2023-11-14T22:13:20.000Z",
+    "channel": "telegram",
+    "user": "testuser"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:58:05.604Z",
+    "channel": "telegram",
+    "user": "testuser"
+  },
+  {
+    "type": "message",
+    "ts": "2026-03-31T17:58:06.412Z",
+    "channel": "webhook",
+    "user": "slackbot"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:58:06.413Z",
+    "channel": "webhook",
+    "user": "slackbot"
+  },
+  {
+    "type": "message",
+    "ts": "2023-11-14T22:13:20.000Z",
+    "channel": "telegram",
+    "user": "testuser"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:58:42.452Z",
+    "channel": "telegram",
+    "user": "testuser"
+  },
+  {
+    "type": "message",
+    "ts": "2026-03-31T17:58:43.334Z",
+    "channel": "webhook",
+    "user": "slackbot"
+  },
+  {
+    "type": "response",
+    "ts": "2026-03-31T17:58:43.335Z",
+    "channel": "webhook",
+    "user": "slackbot"
+  }
+]

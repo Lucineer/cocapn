@@ -2604,3 +2604,510 @@ describe('CLI --mcp flag', () => {
     expect(content).toMatch(/mcp:\s*\{[^}]*type:\s*['"]boolean['"]/);
   });
 });
+
+// ─── Channels Tests ──────────────────────────────────────────────────────────
+
+import * as channelsMod from '../src/channels.ts';
+
+describe('Channels — normalizeTelegram', () => {
+  it('normalizes a Telegram message', () => {
+    const msg = channelsMod.normalizers.telegram({
+      message: { from: { username: 'alice', id: 42 }, text: 'Hello bot', date: 1700000000 },
+    });
+    expect(msg).toBeTruthy();
+    expect(msg!.channel).toBe('telegram');
+    expect(msg!.from).toBe('alice');
+    expect(msg!.text).toBe('Hello bot');
+  });
+
+  it('normalizes Telegram message with id but no username', () => {
+    const msg = channelsMod.normalizers.telegram({
+      message: { from: { id: 99 }, text: 'Hi', date: 1700000000 },
+    });
+    expect(msg).toBeTruthy();
+    expect(msg!.from).toBe('99');
+  });
+
+  it('returns null for message without text', () => {
+    const msg = channelsMod.normalizers.telegram({
+      message: { from: { id: 1 }, date: 1700000000 },
+    });
+    expect(msg).toBeNull();
+  });
+
+  it('returns null for body without message', () => {
+    expect(channelsMod.normalizers.telegram({})).toBeNull();
+    expect(channelsMod.normalizers.telegram({ update_id: 123 })).toBeNull();
+  });
+});
+
+describe('Channels — normalizeWebhook', () => {
+  it('normalizes webhook with text field', () => {
+    const msg = channelsMod.normalizers.webhook({ text: 'Hello from webhook', from: 'slack_user' });
+    expect(msg).toBeTruthy();
+    expect(msg!.channel).toBe('webhook');
+    expect(msg!.from).toBe('slack_user');
+    expect(msg!.text).toBe('Hello from webhook');
+  });
+
+  it('normalizes webhook with message field', () => {
+    const msg = channelsMod.normalizers.webhook({ message: 'Alt text', user: 'irc_user' });
+    expect(msg).toBeTruthy();
+    expect(msg!.text).toBe('Alt text');
+    expect(msg!.from).toBe('irc_user');
+  });
+
+  it('returns null for empty text', () => {
+    expect(channelsMod.normalizers.webhook({ text: '' })).toBeNull();
+    expect(channelsMod.normalizers.webhook({})).toBeNull();
+  });
+
+  it('defaults from to "unknown"', () => {
+    const msg = channelsMod.normalizers.webhook({ text: 'hi' });
+    expect(msg!.from).toBe('unknown');
+  });
+
+  it('uses provided ts', () => {
+    const msg = channelsMod.normalizers.webhook({ text: 'hi', ts: '2024-01-01' });
+    expect(msg!.ts).toBe('2024-01-01');
+  });
+});
+
+describe('Channels — normalizeEmail', () => {
+  it('normalizes email with headers and body', () => {
+    const msg = channelsMod.normalizers.email({ from: 'bob@example.com', date: '2024-01-01' }, 'Hello from email');
+    expect(msg).toBeTruthy();
+    expect(msg!.channel).toBe('email');
+    expect(msg!.from).toBe('bob@example.com');
+    expect(msg!.text).toBe('Hello from email');
+  });
+
+  it('returns null for empty body', () => {
+    expect(channelsMod.normalizers.email({ from: 'a@b.com' }, '')).toBeNull();
+    expect(channelsMod.normalizers.email({ from: 'a@b.com' }, '   ')).toBeNull();
+  });
+});
+
+describe('Channels — handleChannelMessage', () => {
+  it('returns LLM response', async () => {
+    const mockLlm = {
+      async chat() { return { content: 'Channel reply' }; },
+    };
+    const msg: channelsMod.ChannelMessage = {
+      channel: 'webhook', from: 'test_user', text: 'Hi', ts: new Date().toISOString(), raw: {},
+    };
+    const reply = await channelsMod.handleChannelMessage(msg, mockLlm as any, 'You are Bot.');
+    expect(reply.text).toBe('Channel reply');
+  });
+
+  it('includes Telegram reply metadata', async () => {
+    const mockLlm = {
+      async chat() { return { content: 'Telegram reply' }; },
+    };
+    const msg: channelsMod.ChannelMessage = {
+      channel: 'telegram', from: 'alice', text: 'Hi', ts: new Date().toISOString(),
+      raw: { message: { chat: 12345 } },
+    };
+    const reply = await channelsMod.handleChannelMessage(msg, mockLlm as any, 'You are Bot.');
+    expect(reply.text).toBe('Telegram reply');
+    expect(reply.replyTo).toBeDefined();
+    expect((reply.replyTo as any).chat_id).toBe(12345);
+  });
+});
+
+// ─── Analytics Tests ──────────────────────────────────────────────────────────
+
+import * as analyticsMod from '../src/analytics.ts';
+
+describe('Analytics', () => {
+  let testDir: string;
+  let analytics: analyticsMod.Analytics;
+
+  beforeEach(() => {
+    testDir = join(tmpdir(), `cocapn-analytics-${uid()}`);
+    mkdirSync(testDir, { recursive: true });
+    analytics = new analyticsMod.Analytics(testDir);
+  });
+
+  afterEach(() => { try { rmSync(testDir, { recursive: true, force: true }); } catch {} });
+
+  it('tracks events and persists', () => {
+    analytics.track({ type: 'message', ts: '2024-01-01T00:00:00Z', user: 'u1' });
+    analytics.track({ type: 'response', ts: '2024-01-01T00:00:01Z', user: 'u1', duration: 500 });
+    const stats = analytics.getStats(7);
+    expect(stats.total).toBe(1);
+    expect(stats.avgResponseMs).toBe(500);
+  });
+
+  it('returns daily stats', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    analytics.track({ type: 'message', ts: new Date().toISOString(), user: 'u1' });
+    analytics.track({ type: 'response', ts: new Date().toISOString(), user: 'u1', duration: 300 });
+    const stats = analytics.getStats(1);
+    expect(stats.daily.length).toBeGreaterThanOrEqual(1);
+    expect(stats.daily[0].date).toBe(today);
+    expect(stats.daily[0].messages).toBe(1);
+    expect(stats.daily[0].responses).toBe(1);
+  });
+
+  it('tracks topics', () => {
+    analytics.track({ type: 'message', ts: new Date().toISOString(), topic: 'typescript' });
+    analytics.track({ type: 'message', ts: new Date().toISOString(), topic: 'react' });
+    analytics.track({ type: 'message', ts: new Date().toISOString(), topic: 'typescript' });
+    const stats = analytics.getStats(7);
+    expect(stats.topTopics).toContain('typescript');
+  });
+
+  it('persists across instances', () => {
+    analytics.track({ type: 'message', ts: new Date().toISOString(), user: 'u1' });
+    const analytics2 = new analyticsMod.Analytics(testDir);
+    const stats = analytics2.getStats(7);
+    expect(stats.total).toBe(1);
+  });
+
+  it('returns empty stats for no events', () => {
+    const stats = analytics.getStats(7);
+    expect(stats.total).toBe(0);
+    expect(stats.avgResponseMs).toBe(0);
+    expect(stats.daily).toEqual([]);
+    expect(stats.topTopics).toEqual([]);
+  });
+
+  it('trims to 5000 events', () => {
+    for (let i = 0; i < 6000; i++) {
+      analytics.track({ type: 'message', ts: new Date().toISOString(), user: 'u1' });
+    }
+    const raw = JSON.parse(readFileSync(join(testDir, '.cocapn', 'analytics.json'), 'utf-8')) as analyticsMod.AnalyticsEvent[];
+    expect(raw.length).toBeLessThanOrEqual(5000);
+  });
+
+  it('ignores events outside date range', () => {
+    const oldTs = new Date(Date.now() - 10 * 86400000).toISOString();
+    analytics.track({ type: 'message', ts: oldTs, user: 'u1' });
+    const stats = analytics.getStats(7);
+    expect(stats.total).toBe(0);
+  });
+});
+
+// ─── Web New Routes Tests ─────────────────────────────────────────────────────
+
+describe('Web — Files API', () => {
+  let dir: string;
+  let port: number;
+
+  beforeEach(async () => {
+    dir = join(tmpdir(), `cocapn-files-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'files-test' }));
+    writeFileSync(join(dir, 'hello.txt'), 'Hello World');
+    mkdirSync(join(dir, 'src'), { recursive: true });
+    writeFileSync(join(dir, 'src', 'app.ts'), 'const x = 1;\n');
+    writeFileSync(join(dir, 'soul.md'), '---\nname: FileBot\ntone: friendly\n---\nI test files.');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email test@test.com', { cwd: dir });
+    execSync('git config user.name Test', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m init', { cwd: dir, timeout: 5000 });
+  });
+
+  afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  function makeMockLlm() {
+    return {
+      async *chatStream(messages: any[]) {
+        const userMsg = messages.find((m: any) => m.role === 'user');
+        if (userMsg) yield { type: 'content' as const, text: 'Echo: ' + userMsg.content };
+        yield { type: 'done' as const };
+      },
+    };
+  }
+
+  function setupServer(p: number) {
+    const mem = new Memory(dir);
+    const aw = new Awareness(dir);
+    const soul = { name: 'FileBot', tone: 'friendly', model: 'deepseek', body: 'I test files.' };
+    webMod.startWebServer(p, makeMockLlm(), mem, aw, soul);
+    return mem;
+  }
+
+  it('GET /api/files returns file list', async () => {
+    port = 7000 + Math.floor(Math.random() * 900);
+    setupServer(port);
+    await new Promise(r => setTimeout(r, 100));
+
+    const res = await fetch(`http://localhost:${port}/api/files`);
+    expect(res.status).toBe(200);
+    const files = await res.json() as string[];
+    expect(Array.isArray(files)).toBe(true);
+    expect(files).toContain('hello.txt');
+    expect(files).toContain('src/app.ts');
+  });
+
+  it('GET /api/files/hello.txt returns file content', async () => {
+    port = 7100 + Math.floor(Math.random() * 900);
+    setupServer(port);
+    await new Promise(r => setTimeout(r, 100));
+
+    const res = await fetch(`http://localhost:${port}/api/files/hello.txt`);
+    expect(res.status).toBe(200);
+    const data = await res.json() as any;
+    expect(data.content).toBe('Hello World');
+    expect(data.path).toBe('hello.txt');
+  });
+
+  it('GET /api/files/nonexistent returns 404', async () => {
+    port = 7200 + Math.floor(Math.random() * 900);
+    setupServer(port);
+    await new Promise(r => setTimeout(r, 100));
+
+    const res = await fetch(`http://localhost:${port}/api/files/nonexistent.txt`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('Web — Analytics API', () => {
+  let dir: string;
+  let port: number;
+
+  beforeEach(async () => {
+    dir = join(tmpdir(), `cocapn-analytics-web-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'analytics-test' }));
+    writeFileSync(join(dir, 'soul.md'), '---\nname: StatBot\ntone: neutral\n---\nI track stats.');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email test@test.com', { cwd: dir });
+    execSync('git config user.name Test', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m init', { cwd: dir, timeout: 5000 });
+  });
+
+  afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  function makeMockLlm() {
+    return {
+      async *chatStream(messages: any[]) {
+        const userMsg = messages.find((m: any) => m.role === 'user');
+        if (userMsg) yield { type: 'content' as const, text: 'Reply: ' + userMsg.content };
+        yield { type: 'done' as const };
+      },
+    };
+  }
+
+  function setupServer(p: number) {
+    const mem = new Memory(dir);
+    const aw = new Awareness(dir);
+    const soul = { name: 'StatBot', tone: 'neutral', model: 'deepseek', body: 'I track stats.' };
+    webMod.startWebServer(p, makeMockLlm(), mem, aw, soul);
+  }
+
+  it('GET /api/analytics returns stats', async () => {
+    port = 7300 + Math.floor(Math.random() * 900);
+    setupServer(port);
+    await new Promise(r => setTimeout(r, 100));
+
+    const res = await fetch(`http://localhost:${port}/api/analytics`);
+    expect(res.status).toBe(200);
+    const data = await res.json() as any;
+    expect(data).toHaveProperty('total');
+    expect(data).toHaveProperty('daily');
+    expect(data).toHaveProperty('topTopics');
+    expect(data).toHaveProperty('avgResponseMs');
+  });
+});
+
+describe('Web — Telegram webhook', () => {
+  let dir: string;
+  let port: number;
+
+  beforeEach(async () => {
+    dir = join(tmpdir(), `cocapn-tg-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'tg-test' }));
+    writeFileSync(join(dir, 'soul.md'), '---\nname: TgBot\ntone: friendly\n---\nI am a telegram bot.');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email test@test.com', { cwd: dir });
+    execSync('git config user.name Test', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m init', { cwd: dir, timeout: 5000 });
+  });
+
+  afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  function makeMockLlm() {
+    return {
+      async chat() { return { content: 'Telegram reply from bot' }; },
+    };
+  }
+
+  function setupServer(p: number) {
+    const mem = new Memory(dir);
+    const aw = new Awareness(dir);
+    const soul = { name: 'TgBot', tone: 'friendly', model: 'deepseek', body: 'I am a telegram bot.' };
+    webMod.startWebServer(p, makeMockLlm() as any, mem, aw, soul);
+  }
+
+  it('POST /api/telegram/webhook processes message', async () => {
+    port = 7400 + Math.floor(Math.random() * 900);
+    setupServer(port);
+    await new Promise(r => setTimeout(r, 100));
+
+    const res = await fetch(`http://localhost:${port}/api/telegram/webhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: { from: { username: 'testuser', id: 42 }, text: 'Hello bot', date: 1700000000 },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json() as any;
+    expect(data.ok).toBe(true);
+    expect(data.text).toContain('Telegram reply');
+  });
+
+  it('POST /api/telegram/webhook rejects invalid body', async () => {
+    port = 7500 + Math.floor(Math.random() * 900);
+    setupServer(port);
+    await new Promise(r => setTimeout(r, 100));
+
+    const res = await fetch(`http://localhost:${port}/api/telegram/webhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not json',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /api/telegram/webhook returns ok:false for no message', async () => {
+    port = 7600 + Math.floor(Math.random() * 900);
+    setupServer(port);
+    await new Promise(r => setTimeout(r, 100));
+
+    const res = await fetch(`http://localhost:${port}/api/telegram/webhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ update_id: 123 }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json() as any;
+    expect(data.ok).toBe(false);
+  });
+});
+
+describe('Web — Generic webhook', () => {
+  let dir: string;
+  let port: number;
+
+  beforeEach(async () => {
+    dir = join(tmpdir(), `cocapn-wh-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'wh-test' }));
+    writeFileSync(join(dir, 'soul.md'), '---\nname: WhBot\ntone: neutral\n---\nI handle webhooks.');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email test@test.com', { cwd: dir });
+    execSync('git config user.name Test', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m init', { cwd: dir, timeout: 5000 });
+  });
+
+  afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  function makeMockLlm() {
+    return {
+      async chat() { return { content: 'Webhook reply' }; },
+    };
+  }
+
+  function setupServer(p: number) {
+    const mem = new Memory(dir);
+    const aw = new Awareness(dir);
+    const soul = { name: 'WhBot', tone: 'neutral', model: 'deepseek', body: 'I handle webhooks.' };
+    webMod.startWebServer(p, makeMockLlm() as any, mem, aw, soul);
+  }
+
+  it('POST /api/webhook/slack processes message', async () => {
+    port = 7700 + Math.floor(Math.random() * 900);
+    setupServer(port);
+    await new Promise(r => setTimeout(r, 100));
+
+    const res = await fetch(`http://localhost:${port}/api/webhook/slack`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'Hello from Slack', from: 'slackbot' }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json() as any;
+    expect(data.ok).toBe(true);
+    expect(data.text).toContain('Webhook reply');
+  });
+
+  it('POST /api/webhook/:channel rejects no text', async () => {
+    port = 7800 + Math.floor(Math.random() * 900);
+    setupServer(port);
+    await new Promise(r => setTimeout(r, 100));
+
+    const res = await fetch(`http://localhost:${port}/api/webhook/discord`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user: 'bob' }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ─── PWA / Manifest / SW Tests ────────────────────────────────────────────────
+
+describe('PWA — manifest and service worker', () => {
+  const publicDir = join(import.meta.dirname ?? '.', '..', 'public');
+
+  it('manifest.json exists and is valid JSON', () => {
+    const manifestPath = join(publicDir, 'manifest.json');
+    expect(existsSync(manifestPath)).toBe(true);
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+    expect(manifest.name).toBeTruthy();
+    expect(manifest.start_url).toBe('/');
+    expect(manifest.display).toBe('standalone');
+    expect(manifest.icons).toBeDefined();
+    expect(manifest.icons.length).toBeGreaterThan(0);
+  });
+
+  it('sw.js exists and is valid JS', () => {
+    const swPath = join(publicDir, 'sw.js');
+    expect(existsSync(swPath)).toBe(true);
+    const content = readFileSync(swPath, 'utf-8');
+    expect(content).toContain('addEventListener');
+    expect(content).toContain('fetch');
+  });
+
+  it('index.html has manifest link and meta tags', () => {
+    const htmlPath = join(publicDir, 'index.html');
+    const html = readFileSync(htmlPath, 'utf-8');
+    expect(html).toContain('rel="manifest"');
+    expect(html).toContain('apple-mobile-web-app-capable');
+    expect(html).toContain('theme-color');
+    expect(html).toContain('serviceWorker');
+  });
+
+  it('index.html has repo browser panel', () => {
+    const htmlPath = join(publicDir, 'index.html');
+    const html = readFileSync(htmlPath, 'utf-8');
+    expect(html).toContain('repo-panel');
+    expect(html).toContain('file-tree');
+    expect(html).toContain('file-viewer');
+    expect(html).toContain('toggleRepoPanel');
+    expect(html).toContain('/api/files');
+  });
+
+  it('index.html has install prompt', () => {
+    const htmlPath = join(publicDir, 'index.html');
+    const html = readFileSync(htmlPath, 'utf-8');
+    expect(html).toContain('beforeinstallprompt');
+    expect(html).toContain('install-banner');
+  });
+
+  it('index.html has /analytics command', () => {
+    const htmlPath = join(publicDir, 'index.html');
+    const html = readFileSync(htmlPath, 'utf-8');
+    expect(html).toContain('/analytics');
+    expect(html).toContain('/api/analytics');
+  });
+});

@@ -21,14 +21,22 @@
  *   POST /api/user/identify  → set name for session user
  *   GET  /api/knowledge/list → list knowledge entries (?type=&limit=)
  *   POST /api/knowledge/search → search knowledge entries
+ *   GET  /api/files       → list repo files (git ls-files)
+ *   GET  /api/files/:path → read file content
+ *   GET  /api/analytics   → usage stats
+ *   POST /api/telegram/webhook → Telegram bot webhook
+ *   POST /api/webhook/:channel → generic channel webhook
+ *   GET  /manifest.json   → PWA manifest
+ *   GET  /sw.js           → service worker
  *
  * Zero dependencies. Uses only Node.js built-ins.
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { execSync } from 'node:child_process';
 import type { LLM } from './llm.js';
 import type { Memory } from './memory.js';
 import type { Awareness } from './awareness.js';
@@ -37,6 +45,8 @@ import { log as gitLog, stats as gitStats, diff as gitDiff } from './git.js';
 import { loadTheme, themeToCSS } from './theme.js';
 import type { A2AHub } from './a2a.js';
 import { Knowledge } from './knowledge.js';
+import { Analytics } from './analytics.js';
+import { normalizers, handleChannelMessage } from './channels.js';
 
 // ─── Session helpers ───────────────────────────────────────────────────────────
 
@@ -125,6 +135,7 @@ export function startWebServer(
   const avatar = soul.avatar || '🤖';
 
   const knowledge = new Knowledge(repoDir);
+  const analytics = new Analytics(repoDir);
 
   const server = createServer(async (req, res) => {
     // CORS
@@ -333,6 +344,109 @@ export function startWebServer(
         } catch { json(res, { ok: false, error: 'Invalid request' }, 400); }
         return;
       }
+    }
+
+    // ─── Files API ────────────────────────────────────────────────────────────
+
+    // GET /api/files — list repo files (git ls-files)
+    if (req.method === 'GET' && path === '/api/files') {
+      try {
+        const files = execSync('git ls-files', { cwd: repoDir, encoding: 'utf-8', timeout: 5000 }).trim().split('\n').filter(Boolean);
+        json(res, files);
+      } catch { json(res, []); }
+      return;
+    }
+
+    // GET /api/files/* — read file content
+    if (req.method === 'GET' && path.startsWith('/api/files/') && path.length > '/api/files/'.length) {
+      const filePath = decodeURIComponent(path.slice('/api/files/'.length));
+      const absPath = resolve(repoDir, filePath);
+      if (!absPath.startsWith(resolve(repoDir))) { json(res, { error: 'Forbidden' }, 403); return; }
+      if (!existsSync(absPath)) { json(res, { error: 'Not found' }, 404); return; }
+      try {
+        const stat = statSync(absPath);
+        if (stat.size > 1024 * 1024) { json(res, { error: 'File too large' }, 413); return; }
+        const content = readFileSync(absPath, 'utf-8');
+        json(res, { path: filePath, content, size: stat.size });
+      } catch { json(res, { error: 'Cannot read file' }, 500); }
+      return;
+    }
+
+    // ─── Analytics API ────────────────────────────────────────────────────────
+
+    // GET /api/analytics — usage stats
+    if (req.method === 'GET' && path === '/api/analytics') {
+      json(res, analytics.getStats());
+      return;
+    }
+
+    // ─── PWA Assets ──────────────────────────────────────────────────────────
+
+    // GET /manifest.json
+    if (req.method === 'GET' && path === '/manifest.json') {
+      const paths = [
+        join(resolve('.'), 'public', 'manifest.json'),
+        join(import.meta.dirname ?? '.', '..', 'public', 'manifest.json'),
+      ];
+      for (const p of paths) {
+        if (existsSync(p)) {
+          const manifest = readFileSync(p, 'utf-8').replace(/__AGENT_NAME__/g, soul.name);
+          res.writeHead(200, { 'Content-Type': 'application/manifest+json' });
+          res.end(manifest);
+          return;
+        }
+      }
+      res.writeHead(404); res.end('Not found');
+      return;
+    }
+
+    // GET /sw.js
+    if (req.method === 'GET' && path === '/sw.js') {
+      const paths = [
+        join(resolve('.'), 'public', 'sw.js'),
+        join(import.meta.dirname ?? '.', '..', 'public', 'sw.js'),
+      ];
+      for (const p of paths) {
+        if (existsSync(p)) {
+          res.writeHead(200, { 'Content-Type': 'application/javascript' });
+          res.end(readFileSync(p, 'utf-8'));
+          return;
+        }
+      }
+      res.writeHead(404); res.end('Not found');
+      return;
+    }
+
+    // ─── Channel Webhooks ────────────────────────────────────────────────────
+
+    // POST /api/telegram/webhook — Telegram bot webhook
+    if (req.method === 'POST' && path === '/api/telegram/webhook') {
+      const body = await readBody(req);
+      try {
+        const parsed = JSON.parse(body) as Record<string, unknown>;
+        const msg = normalizers.telegram(parsed);
+        if (!msg) { json(res, { ok: false }); return; }
+        analytics.track({ type: 'message', ts: msg.ts, channel: 'telegram', user: msg.from });
+        const reply = await handleChannelMessage(msg, llm, systemPrompt);
+        analytics.track({ type: 'response', ts: new Date().toISOString(), channel: 'telegram', user: msg.from });
+        json(res, reply.replyTo ?? { ok: true, text: reply.text });
+      } catch { json(res, { ok: false, error: 'Invalid request' }, 400); }
+      return;
+    }
+
+    // POST /api/webhook/:channel — generic channel webhook
+    if (req.method === 'POST' && path.startsWith('/api/webhook/')) {
+      const body = await readBody(req);
+      try {
+        const parsed = JSON.parse(body) as Record<string, unknown>;
+        const msg = normalizers.webhook(parsed);
+        if (!msg) { json(res, { ok: false, error: 'No text found' }, 400); return; }
+        analytics.track({ type: 'message', ts: msg.ts, channel: 'webhook', user: msg.from });
+        const reply = await handleChannelMessage(msg, llm, systemPrompt);
+        analytics.track({ type: 'response', ts: new Date().toISOString(), channel: 'webhook', user: msg.from });
+        json(res, { ok: true, text: reply.text });
+      } catch { json(res, { ok: false, error: 'Invalid request' }, 400); }
+      return;
     }
 
     res.writeHead(404);
