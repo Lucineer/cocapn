@@ -75,6 +75,11 @@
  *   cocapn notify rules add [opts]            — Add a notification rule
  *   cocapn notify rules remove <id>           — Remove a notification rule
  *   cocapn notify test                        — Send test notification
+ *   cocapn settings            — Show all settings (grouped)
+ *   cocapn settings get <key>  — Get specific setting
+ *   cocapn settings set <k> <v> — Set a setting
+ *   cocapn settings reset [key] — Reset to defaults
+ *   cocapn settings edit       — Open config in $EDITOR
  *   cocapn version             — Show version
  */
 
@@ -118,6 +123,7 @@ import { createNotifyCommand } from "./commands/notify.js";
 import { createOnboardCommand } from "./commands/onboard.js";
 import { createMobileCommand } from "./commands/mobile.js";
 import { createAgentsCommand } from "./commands/agents.js";
+import { createSettingsCommand } from "./commands/settings.js";
 
 const VERSION = "0.1.0";
 
@@ -227,6 +233,9 @@ export function createCLI(): Command {
 
   // Agent management commands
   program.addCommand(createAgentsCommand());
+
+  // Settings command
+  program.addCommand(createSettingsCommand());
 
   return program;
 }
