@@ -352,6 +352,24 @@ export function startWebServer(
   server.listen(port, () => {
     console.log(`[cocapn] Web chat at http://localhost:${port}`);
   });
+
+  // Graceful shutdown
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log('\n[cocapn] Shutting down...');
+    memory['save']();
+    server.close(() => {
+      console.log('[cocapn] Goodbye!');
+      process.exit(0);
+    });
+    // Force exit after 5s if connections won't close
+    setTimeout(() => process.exit(0), 5000);
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
   return server;
 }
 
