@@ -12,6 +12,7 @@ import { GitSync } from "./sync.js";
 import { DEFAULT_CONFIG, type BridgeConfig } from "../config/types.js";
 import { SyncPublisher, type PublishResult } from "../publishing/sync-publisher.js";
 import { Subscriber, type SubscribeResult } from "../publishing/subscriber.js";
+import { PrivateGateway, type EditResult, type PublicChange } from "../gateway/index.js";
 import type { Brain } from "../brain/index.js";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -62,6 +63,7 @@ export class TwoRepoSync extends EventEmitter<TwoRepoEventMap> {
   private privateSync: GitSync | null;
   private publicSync: GitSync | null;
   private config: TwoRepoConfig;
+  private gateway: PrivateGateway;
   private syncTimer: ReturnType<typeof setInterval> | null = null;
   private _linked = false;
   private _syncing = false;
@@ -83,6 +85,13 @@ export class TwoRepoSync extends EventEmitter<TwoRepoEventMap> {
 
     if (this.privateSync) this.forwardEvents(this.privateSync, "private");
     if (this.publicSync) this.forwardEvents(this.publicSync, "public");
+
+    // Gateway: all public repo edits flow through the private agent
+    this.gateway = new PrivateGateway({
+      privateRepoRoot: config.privateRepo.path,
+      publicRepoRoot: config.publicRepo.path,
+    });
+    this.forwardGatewayEvents();
   }
 
   // ---------------------------------------------------------------------------
@@ -202,6 +211,27 @@ export class TwoRepoSync extends EventEmitter<TwoRepoEventMap> {
     return this.publicSync;
   }
 
+  /** Get the PrivateGateway — all public edits should go through this. */
+  getGateway(): PrivateGateway {
+    return this.gateway;
+  }
+
+  /**
+   * Edit the public repo through the private gateway.
+   * This is the preferred way to make changes to the face repo.
+   * The gateway validates, filters, and commits every change.
+   */
+  async editPublic(change: PublicChange): Promise<EditResult> {
+    return this.gateway.editPublic(change);
+  }
+
+  /**
+   * Review pending changes in the public repo through the gateway guard.
+   */
+  async reviewPublic(): Promise<import("../gateway/index.js").ReviewResult> {
+    return this.gateway.reviewPublic();
+  }
+
   // ---------------------------------------------------------------------------
   // Brain → Face publish pipeline
   // ---------------------------------------------------------------------------
@@ -277,6 +307,13 @@ export class TwoRepoSync extends EventEmitter<TwoRepoEventMap> {
     });
     sync.on("error", (err) => {
       this.emit("error", repo, err);
+    });
+  }
+
+  /** Forward gateway events as error events on the TwoRepoSync emitter. */
+  private forwardGatewayEvents(): void {
+    this.gateway.on("error", (err) => {
+      this.emit("error", "public", err);
     });
   }
 
