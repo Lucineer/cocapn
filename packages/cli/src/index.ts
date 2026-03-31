@@ -84,6 +84,17 @@
  *   cocapn themes apply <name> — Apply a theme
  *   cocapn themes create       — Create custom theme interactively
  *   cocapn themes preview <n>  — Show theme colors in terminal
+ *   cocapn schedule list                      — List scheduled tasks
+ *   cocapn schedule add <name> --cron <expr> --command <cmd> — Add task
+ *   cocapn schedule remove <name>             — Remove task
+ *   cocapn schedule run <name>                — Run task immediately
+ *   cocapn schedule pause <name>              — Pause task
+ *   cocapn schedule resume <name>             — Resume paused task
+ *   cocapn import chatgpt <file> — Import ChatGPT conversations
+ *   cocapn import claude <file>  — Import Claude conversations
+ *   cocapn import markdown <dir> — Import markdown notes as wiki pages
+ *   cocapn import jsonl <file>   — Import JSONL data as knowledge entries
+ *   cocapn import csv <file>     — Import CSV data as knowledge entries
  *   cocapn version             — Show version
  */
 
@@ -129,6 +140,8 @@ import { createMobileCommand } from "./commands/mobile.js";
 import { createAgentsCommand } from "./commands/agents.js";
 import { createSettingsCommand } from "./commands/settings.js";
 import { createThemesCommand } from "./commands/themes.js";
+import { createImportCommand } from "./commands/import.js";
+import { createScheduleCommand } from "./commands/schedule.js";
 
 const VERSION = "0.1.0";
 
@@ -244,6 +257,12 @@ export function createCLI(): Command {
 
   // Theme management commands
   program.addCommand(createThemesCommand());
+
+  // Import command (ChatGPT, Claude, markdown, JSONL, CSV)
+  program.addCommand(createImportCommand());
+
+  // Schedule command (cron jobs and scheduled tasks)
+  program.addCommand(createScheduleCommand());
 
   return program;
 }
