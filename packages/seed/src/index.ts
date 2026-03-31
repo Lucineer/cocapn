@@ -26,6 +26,7 @@ import { startWebServer } from './web.js';
 import { PluginLoader } from './plugins.js';
 import type { ChatContext } from './plugins.js';
 import { A2AHub } from './a2a.js';
+import { Knowledge } from './knowledge.js';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
@@ -158,6 +159,34 @@ function cmdWhoami(awareness: Awareness, memory: Memory): string {
   return lines.join('\n');
 }
 
+function cmdStatus(awareness: Awareness, memory: Memory, soul: Soul, knowledge: Knowledge, a2a?: A2AHub): string {
+  const self = awareness.perceive();
+  const factCount = Object.keys(memory.facts).length;
+  const msgCount = memory.messages.length;
+  const knowledgeEntries = knowledge.list().length;
+  const users = memory.getUsers();
+  const peers = a2a ? a2a.getPeers() : [];
+  const GR = '\x1b[90m', C = '\x1b[36m', G = '\x1b[32m', Y = '\x1b[33m', B = '\x1b[1m', R = '\x1b[0m';
+
+  const lines = [
+    `${C}${B}───────── Status ─────────${R}`,
+    `${GR}Agent:      ${R}${B}${soul.name}${R} ${GR}(tone: ${soul.tone})${R}`,
+    `${GR}Model:      ${R}${soul.model || 'deepseek'}`,
+    `${GR}Born:       ${R}${self.born || 'unknown'} ${GR}(${self.age})${R}`,
+    `${GR}Files:      ${R}${self.files}`,
+    `${GR}Commits:    ${R}${self.commits}`,
+    `${GR}Branch:     ${R}${self.branch}`,
+    `${GR}Languages:  ${R}${self.languages.length > 0 ? self.languages.join(', ') : 'unknown'}`,
+    `${GR}Memory:     ${R}${factCount} facts, ${msgCount} messages`,
+    `${GR}Knowledge:  ${R}${knowledgeEntries} entries`,
+    `${GR}Users:      ${R}${users.length} connected`,
+    `${GR}A2A peers:  ${R}${peers.length > 0 ? peers.map(p => p.name).join(', ') : 'none'}`,
+    `${GR}Pulse:      ${R}${self.feeling || 'calm'}`,
+    `${C}${B}──────────────────────────${R}`,
+  ];
+  return lines.join('\n');
+}
+
 function cmdMemoryList(memory: Memory): string {
   const GR = '\x1b[90m', G = '\x1b[32m', R = '\x1b[0m';
   const lines: string[] = [];
@@ -210,6 +239,7 @@ function cmdHelp(agentName: string): string {
   return [
     `${agentName} — commands:`,
     `${G}  /help${R}              Show this help`,
+    `${G}  /status${R}            Agent status overview`,
     `${G}  /whoami${R}            Full self-perception`,
     `${G}  /memory list${R}       Show all memories`,
     `${G}  /memory clear${R}      Clear all memories`,
@@ -313,7 +343,8 @@ async function cmdA2a(input: string, hub: A2AHub): Promise<string> {
 
 // ─── Terminal REPL ─────────────────────────────────────────────────────────────
 
-async function terminalChat(llm: LLM, memory: Memory, awareness: Awareness, systemPrompt: string, soulName: string, pluginLoader?: PluginLoader, a2a?: A2AHub): Promise<void> {
+async function terminalChat(llm: LLM, memory: Memory, awareness: Awareness, systemPrompt: string, soul: Soul, pluginLoader?: PluginLoader, knowledge?: Knowledge, a2a?: A2AHub): Promise<void> {
+  const soulName = soul.name;
   const self = awareness.narrate();
   const B = '\x1b[1m', C = '\x1b[36m', G = '\x1b[32m', GR = '\x1b[90m', R = '\x1b[0m';
 
@@ -334,6 +365,7 @@ async function terminalChat(llm: LLM, memory: Memory, awareness: Awareness, syst
     if (input === '/help') { console.log(cmdHelp(soulName)); rl.prompt(); continue; }
     if (input === '/clear') { console.log(`${GR}Context cleared.${R}`); rl.prompt(); continue; }
     if (input === '/whoami') { console.log(cmdWhoami(awareness, memory)); rl.prompt(); continue; }
+    if (input === '/status') { console.log(cmdStatus(awareness, memory, soul, knowledge ?? new Knowledge(process.cwd()), a2a)); rl.prompt(); continue; }
     if (input === '/export') { console.log(cmdExport(memory)); rl.prompt(); continue; }
     if (input.startsWith('/import ')) { console.log(cmdImport(memory, input.slice(8))); rl.prompt(); continue; }
 
@@ -470,6 +502,7 @@ async function main(): Promise<void> {
     console.log('');
     console.log('Terminal commands:');
     console.log('  /whoami             Full self-perception');
+    console.log('  /status             Agent status overview');
     console.log('  /memory list        Show all memories');
     console.log('  /memory clear       Clear all memories');
     console.log('  /memory search <q>  Search memories');
@@ -531,6 +564,9 @@ async function main(): Promise<void> {
   const a2aSecret = A2AHub.loadSecret(repoDir);
   const a2a = a2aSecret ? new A2AHub(soul.name, '', a2aSecret) : undefined;
 
+  // Initialize knowledge base
+  const knowledge = new Knowledge(repoDir);
+
   if (args.positionals[0] === 'whoami') {
     console.log(cmdWhoami(awareness, memory));
     return;
@@ -541,7 +577,7 @@ async function main(): Promise<void> {
     const hub = a2a ?? (a2aSecret ? new A2AHub(soul.name, `http://localhost:${port}`, a2aSecret) : undefined);
     startWebServer(port, llm, memory, awareness, soul, hub);
   } else {
-    await terminalChat(llm, memory, awareness, systemPrompt, soul.name, pluginLoader, a2a);
+    await terminalChat(llm, memory, awareness, systemPrompt, soul, pluginLoader, knowledge, a2a);
   }
 }
 
