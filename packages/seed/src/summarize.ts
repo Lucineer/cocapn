@@ -100,8 +100,10 @@ function extractTopics(texts: string[]): string[] {
 
 function formatSummary(s: Summary): string {
   const parts: string[] = [];
+  parts.push(`${s.messageRange.to} messages exchanged`);
   if (s.topics.length) parts.push(`topics: ${s.topics.join(', ')}`);
   if (s.decisions.length) parts.push(`decisions: ${s.decisions.join('; ')}`);
+  if (s.factsLearned.length) parts.push(`facts: ${s.factsLearned.length}`);
   if (s.unansweredQuestions.length) parts.push(`unanswered: ${s.unansweredQuestions.join('; ')}`);
   return parts.join(' | ');
 }

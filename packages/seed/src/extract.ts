@@ -32,9 +32,23 @@ export function extract(message: string, memory: Memory): Extraction {
   if (POSITIVE.test(message)) result.tone = 'positive';
   else if (NEGATIVE.test(message)) result.tone = 'negative';
 
-  // Questions — sentences ending with ?
+  // Questions — sentences containing ?
   const sentences = message.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
-  result.questions = sentences.filter(s => s.endsWith('?')).map(s => s + '?');
+  result.questions = [];
+  for (const s of sentences) {
+    // Check if original message had ? after this sentence fragment
+    if (message.includes(s) && message.slice(message.indexOf(s) + s.length).startsWith('?')) {
+      result.questions.push(s + '?');
+    }
+  }
+  // Fallback: if message contains ? and no questions found
+  if (result.questions.length === 0 && message.includes('?')) {
+    const qParts = message.split('?').slice(0, -1).map(s => s.trim());
+    for (const q of qParts) {
+      const last = q.split(/[.!]/).pop()?.trim();
+      if (last) result.questions.push(last + '?');
+    }
+  }
 
   // Facts — "I am X", "my name is X", "I like X", "I live in X", "I prefer X"
   const factPatterns: Array<{ re: RegExp; key: (m: RegExpMatchArray) => string }> = [

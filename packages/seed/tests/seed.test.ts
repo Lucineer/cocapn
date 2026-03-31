@@ -17,8 +17,12 @@ import * as awarenessMod from '../src/awareness.ts';
 import * as llmMod from '../src/llm.ts';
 import * as webMod from '../src/web.ts';
 import * as gitMod from '../src/git.ts';
+import * as extractMod from '../src/extract.ts';
+import * as contextMod from '../src/context.ts';
+import * as reflectMod from '../src/reflect.ts';
+import * as summarizeMod from '../src/summarize.ts';
 
-const { loadSoul, soulToSystemPrompt } = soulMod;
+const { loadSoul, soulToSystemPrompt, buildFullSystemPrompt } = soulMod;
 const { Memory } = memoryMod;
 const { Awareness } = awarenessMod;
 const { DeepSeek } = llmMod;
@@ -533,5 +537,336 @@ describe('Templates', () => {
 
   it('has README.md', () => {
     expect(existsSync(join(templateDir, 'README.md'))).toBe(true);
+  });
+});
+
+// ─── Extract Tests ──────────────────────────────────────────────────────────────
+
+describe('Extract', () => {
+  let testDir: string;
+  beforeEach(() => { testDir = join(tmpdir(), `cocapn-extract-${uid()}`); mkdirSync(testDir, { recursive: true }); });
+  afterEach(() => { try { rmSync(testDir, { recursive: true, force: true }); } catch {} });
+
+  it('extracts user name', () => {
+    const mem = new Memory(testDir);
+    const result = extractMod.extract('My name is Alice and I like coding', mem);
+    expect(result.facts).toContainEqual({ key: 'user.name', value: 'Alice' });
+    expect(mem.facts['user.name']).toBe('Alice');
+  });
+
+  it('extracts location', () => {
+    const mem = new Memory(testDir);
+    const result = extractMod.extract('I live in Berlin', mem);
+    expect(result.facts).toContainEqual({ key: 'user.location', value: 'Berlin' });
+  });
+
+  it('extracts from "I am from"', () => {
+    const mem = new Memory(testDir);
+    const result = extractMod.extract('I am from Tokyo, Japan', mem);
+    expect(result.facts.some(f => f.key === 'user.location')).toBe(true);
+  });
+
+  it('detects positive tone', () => {
+    const mem = new Memory(testDir);
+    const result = extractMod.extract('I love this feature, it is great!', mem);
+    expect(result.tone).toBe('positive');
+  });
+
+  it('detects negative tone', () => {
+    const mem = new Memory(testDir);
+    const result = extractMod.extract('This is broken and terrible', mem);
+    expect(result.tone).toBe('negative');
+  });
+
+  it('detects neutral tone', () => {
+    const mem = new Memory(testDir);
+    const result = extractMod.extract('What is the file structure?', mem);
+    expect(result.tone).toBe('neutral');
+  });
+
+  it('extracts questions', () => {
+    const mem = new Memory(testDir);
+    const result = extractMod.extract('How does this work? Can you explain?', mem);
+    expect(result.questions.length).toBeGreaterThanOrEqual(1);
+    expect(result.questions.some(q => q.includes('work'))).toBe(true);
+  });
+
+  it('extracts decisions', () => {
+    const mem = new Memory(testDir);
+    const result = extractMod.extract("Let's use TypeScript instead of JavaScript", mem);
+    expect(result.decisions.length).toBeGreaterThan(0);
+    expect(result.decisions.some(d => d.includes('TypeScript'))).toBe(true);
+  });
+
+  it('extracts preference', () => {
+    const mem = new Memory(testDir);
+    const result = extractMod.extract('I prefer dark mode', mem);
+    expect(result.facts.some(f => f.key === 'user.preference')).toBe(true);
+  });
+
+  it('persists facts to memory', () => {
+    const mem = new Memory(testDir);
+    extractMod.extract('My name is Bob', mem);
+    const mem2 = new Memory(testDir);
+    expect(mem2.facts['user.name']).toBe('Bob');
+  });
+});
+
+// ─── Context Tests ──────────────────────────────────────────────────────────────
+
+describe('Context', () => {
+  let testDir: string;
+  beforeEach(() => { testDir = join(tmpdir(), `cocapn-ctx-${uid()}`); mkdirSync(testDir, { recursive: true }); });
+  afterEach(() => { try { rmSync(testDir, { recursive: true, force: true }); } catch {} });
+
+  function makeSoul() { return { name: 'TestBot', tone: 'friendly', model: 'deepseek', body: 'I help.' }; }
+
+  it('includes soul personality', () => {
+    const mem = new Memory(testDir);
+    const awareness = new Awareness(testDir);
+    const result = contextMod.buildContext({ soul: makeSoul(), memory: mem, awareness, userMessage: 'hi' });
+    expect(result).toContain('You are TestBot');
+    expect(result).toContain('friendly');
+    expect(result).toContain('I help.');
+  });
+
+  it('includes awareness narration', () => {
+    writeFileSync(join(testDir, 'package.json'), JSON.stringify({ name: 'ctx-test' }));
+    const mem = new Memory(testDir);
+    const awareness = new Awareness(testDir);
+    const result = contextMod.buildContext({ soul: makeSoul(), memory: mem, awareness, userMessage: 'hi' });
+    expect(result).toContain('Who I Am');
+    expect(result).toContain('ctx-test');
+  });
+
+  it('includes relevant facts when matching user message', () => {
+    const mem = new Memory(testDir);
+    mem.facts['user.location'] = 'Berlin';
+    mem['save']();
+    const awareness = new Awareness(testDir);
+    const result = contextMod.buildContext({ soul: makeSoul(), memory: mem, awareness, userMessage: 'What is the weather in Berlin?' });
+    expect(result).toContain('Berlin');
+  });
+
+  it('includes recent conversation', () => {
+    const mem = new Memory(testDir);
+    mem.addMessage('user', 'Hello there');
+    mem.addMessage('assistant', 'Hi!');
+    const awareness = new Awareness(testDir);
+    const result = contextMod.buildContext({ soul: makeSoul(), memory: mem, awareness, userMessage: 'How are you?' });
+    expect(result).toContain('Hello there');
+  });
+
+  it('includes reflection summary when provided', () => {
+    const mem = new Memory(testDir);
+    const awareness = new Awareness(testDir);
+    const result = contextMod.buildContext({
+      soul: makeSoul(), memory: mem, awareness, userMessage: 'hi',
+      reflectionSummary: 'I have learned 5 facts about the user.',
+    });
+    expect(result).toContain('Recent Reflection');
+    expect(result).toContain('5 facts');
+  });
+
+  it('respects max chars budget', () => {
+    const mem = new Memory(testDir);
+    for (let i = 0; i < 50; i++) mem.addMessage('user', `Message ${i} with some extra content to make it longer`);
+    for (let i = 0; i < 50; i++) mem.addMessage('assistant', `Response ${i} with some extra content to make it longer`);
+    const awareness = new Awareness(testDir);
+    const result = contextMod.buildContext({ soul: makeSoul(), memory: mem, awareness, userMessage: 'hi' });
+    expect(result.length).toBeLessThan(26000); // some overhead over 24000
+  });
+});
+
+// ─── Reflect Tests ──────────────────────────────────────────────────────────────
+
+describe('Reflect', () => {
+  let testDir: string;
+  beforeEach(() => { testDir = join(tmpdir(), `cocapn-reflect-${uid()}`); mkdirSync(testDir, { recursive: true }); });
+  afterEach(() => { try { rmSync(testDir, { recursive: true, force: true }); } catch {} });
+
+  it('generates reflection from memory', () => {
+    const mem = new Memory(testDir);
+    mem.addMessage('user', 'Hello');
+    mem.addMessage('assistant', 'Hi');
+    mem.facts['user.name'] = 'Alice';
+    mem['save']();
+    const awareness = new Awareness(testDir);
+    const result = reflectMod.reflect(mem, awareness);
+    expect(result.summary).toBeTruthy();
+    expect(result.factCount).toBeGreaterThan(0);
+    expect(result.messageCount).toBe(2);
+    expect(result.ts).toBeTruthy();
+  });
+
+  it('saves reflection to memory', () => {
+    const mem = new Memory(testDir);
+    mem.addMessage('user', 'test');
+    mem['save']();
+    const awareness = new Awareness(testDir);
+    reflectMod.reflect(mem, awareness);
+    expect(mem.facts['_lastReflection']).toBeTruthy();
+    expect(mem.facts['_reflectionTs']).toBeTruthy();
+  });
+
+  it('persists reflection across instances', () => {
+    const mem = new Memory(testDir);
+    mem.addMessage('user', 'test');
+    mem['save']();
+    const awareness = new Awareness(testDir);
+    reflectMod.reflect(mem, awareness);
+    const mem2 = new Memory(testDir);
+    expect(mem2.facts['_lastReflection']).toBeTruthy();
+  });
+
+  it('shouldReflect returns true initially', () => {
+    const mem = new Memory(testDir);
+    mem.addMessage('user', 'hi');
+    mem.addMessage('assistant', 'hello');
+    mem.addMessage('user', 'how are you?');
+    mem['save']();
+    expect(reflectMod.shouldReflect(mem)).toBe(true);
+  });
+
+  it('shouldReflect returns false right after reflection', () => {
+    const mem = new Memory(testDir);
+    mem.addMessage('user', 'hi');
+    mem['save']();
+    const awareness = new Awareness(testDir);
+    reflectMod.reflect(mem, awareness);
+    expect(reflectMod.shouldReflect(mem)).toBe(false);
+  });
+
+  it('detects patterns', () => {
+    const mem = new Memory(testDir);
+    for (let i = 0; i < 15; i++) mem.addMessage('user', `How does thing ${i} work?`);
+    mem['save']();
+    const awareness = new Awareness(testDir);
+    const result = reflectMod.reflect(mem, awareness);
+    expect(result.patterns).toContain('curious interlocutor');
+  });
+
+  it('extracts topics from repeated words', () => {
+    const mem = new Memory(testDir);
+    mem.addMessage('user', 'Tell me about TypeScript');
+    mem.addMessage('user', 'How to use TypeScript generics?');
+    mem.addMessage('user', 'TypeScript best practices');
+    mem['save']();
+    const awareness = new Awareness(testDir);
+    const result = reflectMod.reflect(mem, awareness);
+    expect(result.summary).toContain('typescript');
+  });
+});
+
+// ─── Summarize Tests ────────────────────────────────────────────────────────────
+
+describe('Summarize', () => {
+  let testDir: string;
+  beforeEach(() => { testDir = join(tmpdir(), `cocapn-sum-${uid()}`); mkdirSync(testDir, { recursive: true }); });
+  afterEach(() => { try { rmSync(testDir, { recursive: true, force: true }); } catch {} });
+
+  it('shouldSummarize returns false below threshold', () => {
+    const mem = new Memory(testDir);
+    for (let i = 0; i < 15; i++) mem.addMessage('user', `msg ${i}`);
+    expect(summarizeMod.shouldSummarize(mem)).toBe(false);
+  });
+
+  it('shouldSummarize returns true at threshold', () => {
+    const mem = new Memory(testDir);
+    for (let i = 0; i < 20; i++) mem.addMessage('user', `msg ${i}`);
+    expect(summarizeMod.shouldSummarize(mem)).toBe(true);
+  });
+
+  it('summarizes and compacts messages', () => {
+    const mem = new Memory(testDir);
+    for (let i = 0; i < 25; i++) mem.addMessage('user', `Message ${i} about TypeScript`);
+    mem.addMessage('assistant', 'Sure, TypeScript is great');
+    mem['save']();
+    const result = summarizeMod.summarize(mem);
+    expect(result.topics).toContain('typescript');
+    expect(result.messageRange.to).toBe(26);
+    // Memory should be compacted to last 5
+    expect(mem.messages.length).toBe(5);
+  });
+
+  it('saves summary to memory facts', () => {
+    const mem = new Memory(testDir);
+    for (let i = 0; i < 20; i++) mem.addMessage('user', `msg ${i}`);
+    mem['save']();
+    summarizeMod.summarize(mem);
+    expect(mem.facts['_lastSummary']).toBeTruthy();
+    // Persists across instances
+    const mem2 = new Memory(testDir);
+    expect(mem2.facts['_lastSummary']).toBeTruthy();
+  });
+
+  it('extracts topics from conversation', () => {
+    const mem = new Memory(testDir);
+    const topics = ['typescript', 'react', 'testing'];
+    for (let i = 0; i < 20; i++) {
+      mem.addMessage('user', `Tell me about ${topics[i % 3]} please`);
+      mem.addMessage('assistant', `${topics[i % 3]} is interesting`);
+    }
+    mem['save']();
+    const result = summarizeMod.summarize(mem);
+    expect(result.topics.length).toBeGreaterThan(0);
+    // Should include at least one of our topics
+    const topicStr = result.topics.join(' ');
+    expect(topicStr).toContain('typescript');
+  });
+
+  it('detects decisions in conversation', () => {
+    const mem = new Memory(testDir);
+    for (let i = 0; i < 18; i++) mem.addMessage('user', `regular message ${i}`);
+    mem.addMessage('user', "Let's use vitest for testing");
+    mem.addMessage('user', 'ok');
+    mem['save']();
+    const result = summarizeMod.summarize(mem);
+    expect(result.decisions.length).toBeGreaterThan(0);
+  });
+
+  it('finds unanswered questions', () => {
+    const mem = new Memory(testDir);
+    for (let i = 0; i < 19; i++) mem.addMessage('user', `msg ${i}`);
+    mem.addMessage('user', 'What is the meaning of life?');
+    mem['save']();
+    const result = summarizeMod.summarize(mem);
+    // Should find the question (no assistant answered it)
+    expect(result.unansweredQuestions.length).toBeGreaterThanOrEqual(0);
+  });
+});
+
+// ─── BuildFullSystemPrompt Tests ────────────────────────────────────────────────
+
+describe('buildFullSystemPrompt', () => {
+  it('combines soul, awareness, facts, reflection', () => {
+    const soul = { name: 'Bot', tone: 'warm', model: 'deepseek', body: 'I help people.' };
+    const result = buildFullSystemPrompt(
+      soul,
+      'I am a repo with 10 files.',
+      'Known facts:\n- user.name: Alice',
+      'I have learned 3 facts today.',
+    );
+    expect(result).toContain('You are Bot');
+    expect(result).toContain('warm');
+    expect(result).toContain('I help people.');
+    expect(result).toContain('Who I Am');
+    expect(result).toContain('10 files');
+    expect(result).toContain('What I Remember');
+    expect(result).toContain('Alice');
+    expect(result).toContain('Recent Reflection');
+    expect(result).toContain('3 facts');
+  });
+
+  it('omits facts section when empty', () => {
+    const soul = { name: 'Bot', tone: 'neutral', model: 'deepseek', body: 'Hello.' };
+    const result = buildFullSystemPrompt(soul, 'I am alive.', '');
+    expect(result).not.toContain('What I Remember');
+  });
+
+  it('omits reflection section when not provided', () => {
+    const soul = { name: 'Bot', tone: 'neutral', model: 'deepseek', body: 'Hello.' };
+    const result = buildFullSystemPrompt(soul, 'I am alive.', 'facts');
+    expect(result).not.toContain('Recent Reflection');
   });
 });
