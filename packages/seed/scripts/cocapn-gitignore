@@ -1,0 +1,18 @@
+# cocapn/.gitignore
+# Copy this file to cocapn/.gitignore when setting up a new repo.
+# These files contain private data and should NOT be committed.
+
+# Private memory store
+memory.json
+
+# Private knowledge base
+knowledge.json
+
+# User records (private)
+users.json
+
+# A2A shared secret
+a2a-secret.json
+
+# Agent config (may contain API keys)
+cocapn.json

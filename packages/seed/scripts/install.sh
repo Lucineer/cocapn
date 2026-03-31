@@ -55,6 +55,22 @@ else
   echo -e "${GREEN}✓${RESET} Created cocapn/"
 fi
 
+# ─── 3b. Write .gitignore inside cocapn/ ────────────────────────────────────
+
+if [ -f "cocapn/.gitignore" ]; then
+  echo -e "${GRAY}  cocapn/.gitignore exists — keeping${RESET}"
+else
+  cat > cocapn/.gitignore << 'GITIGNORE'
+# cocapn private data — never commit these
+memory.json
+knowledge.json
+users.json
+a2a-secret.json
+cocapn.json
+GITIGNORE
+  echo -e "${GREEN}✓${RESET} Wrote cocapn/.gitignore"
+fi
+
 # ─── 4. Write soul.md (universal) ─────────────────────────────────────────
 
 if [ -f "cocapn/soul.md" ]; then
