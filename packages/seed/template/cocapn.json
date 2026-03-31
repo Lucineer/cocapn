@@ -1,8 +1,10 @@
 {
-  "name": "unnamed",
-  "version": "0.1.0",
-  "model": "deepseek",
-  "memory": "cocapn/memory.json",
-  "soul": "soul.md",
-  "mode": "private"
+  "mode": "private",
+  "port": 3100,
+  "llm": {
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "baseUrl": "",
+    "apiKey": ""
+  }
 }
