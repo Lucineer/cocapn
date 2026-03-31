@@ -1,0 +1,25 @@
+:root {
+  --color-primary: #9a3412;
+  --color-secondary: #c2410c;
+  --color-accent: #fb923c;
+  --color-background: #fef7ed;
+  --color-surface: #fff7ed;
+  --color-text: #431407;
+  --color-text-secondary: #7c2d12;
+  --color-border: #fed7aa;
+  --color-success: #16a34a;
+  --color-warning: #ca8a04;
+  --color-error: #dc2626;
+  --color-info: #2563eb;
+  --color-morning: #fbbf24;
+  --color-evening: #7c3aed;
+  --color-spring: #22c55e;
+  --color-summer: #f59e0b;
+  --color-autumn: #ea580c;
+  --color-winter: #6366f1;
+  --font-body: 'Lora', Georgia, serif;
+  --font-heading: 'Playfair Display', Georgia, serif;
+  --font-mono: 'Fira Code', monospace;
+  --radius: 8px;
+  --shadow: 0 2px 8px rgba(154, 52, 18, 0.08);
+}

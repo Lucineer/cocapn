@@ -1,0 +1,58 @@
+config:
+  mode: local
+  port: 8787
+
+sync:
+  interval: 30
+  autoCommit: true
+  autoPush: false
+
+capabilities:
+  filesystem: true
+  git: true
+  llm: deepseek
+  vectorSearch: auto
+  mcp: true
+  fleet: false
+  sandbox: true
+
+llm:
+  provider: deepseek
+  model: deepseek-chat
+  temperature: 0.4
+  maxTokens: 8192
+  systemPrompt:
+    showGrowthLog: true
+
+brain:
+  autoSync: true
+  factsNamespace: growth
+  memoryLimit: 2000
+
+features:
+  selfReview: true
+  growthLogging: true
+  soulUpdates: true
+  knowledgeBaseUpdates: true
+  patternRecognition: true
+  improvementMetrics: true
+  userFeedbackIntegration: true
+  metaLearning: true
+
+improvement:
+  reviewInterval: daily
+  reviewSampleSize: 20
+  autoProposeChanges: true
+  requireUserApproval: true
+  metricsDimensions:
+    - accuracy
+    - helpfulness
+    - completeness
+    - tone
+  growthLogRetention: 365d
+
+templates:
+  - growth-log
+  - self-review-report
+  - improvement-proposal
+  - meta-learning-journal

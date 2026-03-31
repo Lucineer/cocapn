@@ -1,0 +1,22 @@
+:root {
+  --color-primary: #92400e;
+  --color-secondary: #d97706;
+  --color-accent: #fbbf24;
+  --color-background: #fffbeb;
+  --color-surface: #fef3c7;
+  --color-text: #451a03;
+  --color-text-secondary: #78350f;
+  --color-border: #fde68a;
+  --color-success: #16a34a;
+  --color-warning: #ea580c;
+  --color-error: #dc2626;
+  --color-info: #2563eb;
+  --color-past: #6d28d9;
+  --color-present: #d97706;
+  --color-future: #0891b2;
+  --font-body: 'Source Serif 4', Georgia, serif;
+  --font-heading: 'DM Serif Display', Georgia, serif;
+  --font-mono: 'Fira Code', monospace;
+  --radius: 8px;
+  --shadow: 0 2px 8px rgba(146, 64, 14, 0.12);
+}

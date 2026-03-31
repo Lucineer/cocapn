@@ -1,0 +1,22 @@
+:root {
+  --color-primary: #312e81;
+  --color-secondary: #6366f1;
+  --color-accent: #a78bfa;
+  --color-background: #0c0a1d;
+  --color-surface: #1a1735;
+  --color-text: #e2e8f0;
+  --color-text-secondary: #94a3b8;
+  --color-border: #2d2a5e;
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
+  --color-info: #818cf8;
+  --color-dream-light: #c4b5fd;
+  --color-dream-deep: #4338ca;
+  --color-dream-rem: #7c3aed;
+  --font-body: 'Crimson Text', Georgia, serif;
+  --font-heading: 'Outfit', system-ui, sans-serif;
+  --font-mono: 'Fira Code', monospace;
+  --radius: 12px;
+  --shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
+}

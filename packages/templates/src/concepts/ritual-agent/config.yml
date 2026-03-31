@@ -1,0 +1,70 @@
+config:
+  mode: local
+  port: 8787
+
+sync:
+  interval: 30
+  autoCommit: true
+  autoPush: false
+
+capabilities:
+  filesystem: true
+  git: true
+  llm: deepseek
+  vectorSearch: auto
+  mcp: true
+  fleet: false
+  sandbox: true
+
+llm:
+  provider: deepseek
+  model: deepseek-chat
+  temperature: 0.6
+  maxTokens: 8192
+  systemPrompt:
+    timeAware: true
+    seasonalMode: true
+
+brain:
+  autoSync: true
+  factsNamespace: ritual
+  memoryLimit: 2000
+
+features:
+  morningCheckin: true
+  eveningReflection: true
+  weeklyReview: true
+  monthlyReflection: true
+  seasonalCeremonies: true
+  milestoneCelebration: true
+  habitTracking: true
+  rhythmAdaptation: true
+
+rituals:
+  morning: "7 * * * *"       # 7 AM daily
+  evening: "21 * * *"        # 9 PM daily
+  weekly: "0 10 * * 1"       # 10 AM Monday
+  monthly: "0 10 1 * *"      # 10 AM 1st of month
+  seasonal: "0 10 21 3,6,9,12 *"  # Equinox/solstice dates
+
+seasons:
+  spring:
+    tone: fresh, energetic
+    themes: [growth, renewal, planning]
+  summer:
+    tone: warm, expansive
+    themes: [abundance, celebration, action]
+  autumn:
+    tone: reflective, grateful
+    themes: [harvest, reflection, letting-go]
+  winter:
+    tone: quiet, contemplative
+    themes: [rest, planning, depth]
+
+templates:
+  - morning-checkin
+  - evening-reflection
+  - weekly-review
+  - monthly-reflection
+  - milestone-ceremony
+  - seasonal-ritual

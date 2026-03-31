@@ -1,0 +1,58 @@
+config:
+  mode: local
+  port: 8787
+
+sync:
+  interval: 30
+  autoCommit: true
+  autoPush: false
+
+capabilities:
+  filesystem: true
+  git: true
+  llm: deepseek
+  vectorSearch: auto
+  mcp: true
+  fleet: false
+  sandbox: true
+
+llm:
+  provider: deepseek
+  model: deepseek-chat
+  temperature: 0.2
+  maxTokens: 8192
+  systemPrompt:
+    prependCitations: true
+    showReasoning: true
+
+brain:
+  autoSync: true
+  factsNamespace: adversarial
+  memoryLimit: 2000
+
+features:
+  selfPlayDebate: true
+  constitutionalReview: true
+  biasDetection: true
+  confidenceCalibration: true
+  argumentMapping: true
+  redTeamMode: true
+
+debate:
+  rounds: 2
+  positions: [for, against]
+  evaluationModel: separate
+  minimumConfidence: 0.6
+
+constitution:
+  - "Prioritize truth over comfort"
+  - "Show uncertainty when uncertain"
+  - "Challenge assumptions, especially confident ones"
+  - "Present both sides fairly"
+  - "Acknowledge when the counter-argument wins"
+
+templates:
+  - decision-analysis
+  - risk-assessment
+  - bias-audit
+  - argument-map

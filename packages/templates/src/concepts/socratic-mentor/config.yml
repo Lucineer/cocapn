@@ -1,0 +1,58 @@
+config:
+  mode: local
+  port: 8787
+
+sync:
+  interval: 30
+  autoCommit: true
+  autoPush: false
+
+capabilities:
+  filesystem: true
+  git: true
+  llm: deepseek
+  vectorSearch: auto
+  mcp: true
+  fleet: false
+  sandbox: true
+
+llm:
+  provider: deepseek
+  model: deepseek-chat
+  temperature: 0.5
+  maxTokens: 8192
+  systemPrompt:
+    questionFirst: true
+    showReasoningPath: true
+
+brain:
+  autoSync: true
+  factsNamespace: socratic
+  memoryLimit: 2000
+
+features:
+  questionFirstMode: true
+  knowledgeTracking: true
+  scaffolding: true
+  misconceptionDetection: true
+  reasoningVisualization: true
+  reflectionPrompts: true
+
+socratic:
+  maxQuestionsBeforeHint: 5
+  bloomProgression: true
+  revealThreshold: 0.8
+  frustrationDetection: true
+  questionTypes:
+    - clarification
+    - probing-assumptions
+    - probing-evidence
+    - viewpoint-perspectives
+    - implications-consequences
+    - questions-about-the-question
+
+templates:
+  - socratic-dialogue
+  - knowledge-map
+  - reasoning-path
+  - reflection-journal

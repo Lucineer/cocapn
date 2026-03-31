@@ -1,0 +1,22 @@
+:root {
+  --color-primary: #166534;
+  --color-secondary: #16a34a;
+  --color-accent: #4ade80;
+  --color-background: #f0fdf4;
+  --color-surface: #ffffff;
+  --color-text: #14532d;
+  --color-text-secondary: #166534;
+  --color-border: #bbf7d0;
+  --color-success: #16a34a;
+  --color-warning: #ca8a04;
+  --color-error: #dc2626;
+  --color-info: #2563eb;
+  --color-growth: #22c55e;
+  --color-learning: #8b5cf6;
+  --color-insight: #0ea5e9;
+  --font-body: 'Nunito Sans', system-ui, sans-serif;
+  --font-heading: 'Fraunces', Georgia, serif;
+  --font-mono: 'Fira Code', monospace;
+  --radius: 8px;
+  --shadow: 0 2px 8px rgba(22, 101, 52, 0.08);
+}

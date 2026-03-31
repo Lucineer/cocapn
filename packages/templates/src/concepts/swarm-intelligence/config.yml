@@ -1,0 +1,68 @@
+config:
+  mode: local
+  port: 8787
+
+sync:
+  interval: 30
+  autoCommit: true
+  autoPush: false
+
+capabilities:
+  filesystem: true
+  git: true
+  llm: deepseek
+  vectorSearch: auto
+  mcp: true
+  fleet: false
+  sandbox: true
+
+llm:
+  provider: deepseek
+  model: deepseek-chat
+  temperature: 0.5
+  maxTokens: 8192
+  systemPrompt:
+    showPersonaContributions: true
+
+brain:
+  autoSync: true
+  factsNamespace: swarm
+  memoryLimit: 2000
+
+features:
+  multiPersona: true
+  perspectiveVoting: true
+  synthesis: true
+  personaTransparency: true
+  dynamicWeighting: true
+  conflictSurfacing: true
+  ensembleReasoning: true
+
+personas:
+  - name: Scientist
+    focus: evidence, data, empirical reasoning
+    weight: 1.0
+    color: "#2563eb"
+  - name: Artist
+    focus: creativity, aesthetics, novel connections
+    weight: 1.0
+    color: "#9333ea"
+  - name: Engineer
+    focus: practicality, systems thinking, implementation
+    weight: 1.0
+    color: "#059669"
+  - name: Philosopher
+    focus: ethics, meaning, long-term implications
+    weight: 1.0
+    color: "#d97706"
+
+voting:
+  method: weighted
+  conflictThreshold: 0.3
+  requireConsensus: false
+
+templates:
+  - multi-perspective-analysis
+  - decision-matrix
+  - synthesis-report
+  - persona-config
