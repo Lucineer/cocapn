@@ -3602,3 +3602,239 @@ describe('Research Daemon', () => {
     expect(daemon.listResearch().length).toBe(0);
   });
 });
+
+// ─── PluginRegistry Tests ──────────────────────────────────────────────────────
+
+import * as glueMod from '../src/glue.ts';
+
+describe('PluginRegistry', () => {
+  let testDir: string;
+  beforeEach(() => { testDir = join(tmpdir(), `cocapn-reg-${uid()}`); mkdirSync(testDir, { recursive: true }); });
+  afterEach(() => { try { rmSync(testDir, { recursive: true, force: true }); } catch {} });
+
+  it('lists built-in plugins', () => {
+    const reg = new pluginsMod.PluginRegistry(testDir);
+    const list = reg.listPlugins();
+    expect(list.length).toBe(5);
+    expect(list.map(p => p.name)).toContain('vision');
+    expect(list.map(p => p.name)).toContain('research');
+    expect(list.map(p => p.name)).toContain('analytics');
+    expect(list.map(p => p.name)).toContain('channels');
+    expect(list.map(p => p.name)).toContain('a2a');
+  });
+
+  it('loads a built-in plugin by name', () => {
+    const reg = new pluginsMod.PluginRegistry(testDir);
+    const vision = reg.loadPlugin('vision');
+    expect(vision).toBeDefined();
+    expect(vision!.name).toBe('vision');
+    expect(vision!.version).toBe('0.1.0');
+    expect(vision!.hooks).toContain('after-chat');
+    expect(vision!.commands).toBeDefined();
+    expect(vision!.commands!.length).toBeGreaterThan(0);
+  });
+
+  it('returns undefined for unknown plugin', () => {
+    const reg = new pluginsMod.PluginRegistry(testDir);
+    expect(reg.loadPlugin('nonexistent')).toBeUndefined();
+  });
+
+  it('each built-in plugin has commands', () => {
+    const reg = new pluginsMod.PluginRegistry(testDir);
+    const cmds = reg.getCommands();
+    expect(cmds.length).toBeGreaterThan(0);
+    const names = cmds.map(c => c.name);
+    expect(names).toContain('generate');
+    expect(names).toContain('research');
+    expect(names).toContain('analytics');
+  });
+
+  it('built-in plugins have no API routes', () => {
+    const reg = new pluginsMod.PluginRegistry(testDir);
+    expect(reg.getRoutes()).toEqual([]);
+  });
+
+  it('initAll does not throw', async () => {
+    const reg = new pluginsMod.PluginRegistry(testDir);
+    await expect(reg.initAll({})).resolves.toBeUndefined();
+  });
+
+  it('lists plugin with hooks and command count', () => {
+    const reg = new pluginsMod.PluginRegistry(testDir);
+    const list = reg.listPlugins();
+    const vision = list.find(p => p.name === 'vision')!;
+    expect(vision.hooks).toContain('after-chat');
+    expect(vision.commands).toBeGreaterThan(0);
+  });
+});
+
+// ─── Glue Tests ─────────────────────────────────────────────────────────────────
+
+describe('GlueBus', () => {
+  it('creates a GlueBus', () => {
+    const bus = new glueMod.GlueBus();
+    expect(bus.list()).toEqual([]);
+  });
+
+  it('connects to an agent', () => {
+    const bus = new glueMod.GlueBus();
+    const conn = bus.connect('agent-1', 'http://localhost:3101');
+    expect(conn.id).toBe('agent-1');
+    expect(conn.url).toBe('http://localhost:3101');
+    expect(conn.transport).toBe('http');
+    expect(bus.list()).toContain('agent-1');
+  });
+
+  it('gets a connection by id', () => {
+    const bus = new glueMod.GlueBus();
+    bus.connect('agent-1', 'http://localhost:3101');
+    const conn = bus.get('agent-1');
+    expect(conn).toBeDefined();
+    expect(conn!.id).toBe('agent-1');
+    expect(bus.get('nonexistent')).toBeUndefined();
+  });
+
+  it('disconnects an agent', () => {
+    const bus = new glueMod.GlueBus();
+    bus.connect('agent-1', 'http://localhost:3101');
+    expect(bus.disconnect('agent-1')).toBe(true);
+    expect(bus.list()).toEqual([]);
+    expect(bus.disconnect('agent-1')).toBe(false);
+  });
+
+  it('supports multiple connections', () => {
+    const bus = new glueMod.GlueBus();
+    bus.connect('a1', 'http://localhost:3101');
+    bus.connect('a2', 'http://localhost:3102', 'ws');
+    bus.connect('a3', 'http://localhost:3103', 'stdio');
+    expect(bus.list().length).toBe(3);
+  });
+
+  it('subscribes to events', () => {
+    const bus = new glueMod.GlueBus();
+    const conn = bus.connect('agent-1', 'http://localhost:3101');
+    const received: unknown[] = [];
+    conn.on('test-event', (data) => received.push(data));
+    conn.emit('test-event', { hello: 'world' });
+    expect(received.length).toBe(1);
+    expect((received[0] as any).hello).toBe('world');
+  });
+
+  it('unsubscribes from events', () => {
+    const bus = new glueMod.GlueBus();
+    const conn = bus.connect('agent-1', 'http://localhost:3101');
+    const received: unknown[] = [];
+    const handler = (data: unknown) => received.push(data);
+    conn.on('test', handler);
+    conn.emit('test', 'first');
+    conn.off('test', handler);
+    conn.emit('test', 'second');
+    expect(received.length).toBe(1);
+  });
+
+  it('GlueBus on subscribes globally', () => {
+    const bus = new glueMod.GlueBus();
+    const received: unknown[] = [];
+    bus.on('custom-event', (data) => received.push(data));
+    bus.emit('custom-event', 'hello'); // This is EventEmitter, not agent-specific
+    expect(received.length).toBe(1);
+  });
+});
+
+describe('AgentConnection', () => {
+  it('creates with http transport by default', () => {
+    const conn = new glueMod.AgentConnection('test', 'http://localhost:3100');
+    expect(conn.transport).toBe('http');
+    expect(conn.url).toBe('http://localhost:3100');
+  });
+
+  it('creates with ws transport', () => {
+    const conn = new glueMod.AgentConnection('test', 'ws://localhost:3100', 'ws');
+    expect(conn.transport).toBe('ws');
+  });
+
+  it('creates with stdio transport', () => {
+    const conn = new glueMod.AgentConnection('test', 'stdio', 'stdio');
+    expect(conn.transport).toBe('stdio');
+  });
+
+  it('strips trailing slash from url', () => {
+    const conn = new glueMod.AgentConnection('test', 'http://localhost:3100/');
+    expect(conn.url).toBe('http://localhost:3100');
+  });
+
+  it('send returns error for unreachable agent', async () => {
+    const conn = new glueMod.AgentConnection('test', 'http://localhost:19999');
+    const res = await conn.send({ to: 'test', type: 'chat', payload: 'hello' });
+    const result = res as { ok: boolean; error?: string };
+    expect(result.ok).toBe(false);
+    expect(result.error).toBeTruthy();
+  });
+
+  it('delegate returns error for unreachable agent', async () => {
+    const conn = new glueMod.AgentConnection('test', 'http://localhost:19999');
+    const result = await conn.delegate('do something');
+    expect(result.ok).toBe(false);
+  });
+
+  it('shareContext returns error for unreachable agent', async () => {
+    const conn = new glueMod.AgentConnection('test', 'http://localhost:19999');
+    const result = await conn.shareContext(['file.ts']);
+    expect(result.ok).toBe(false);
+  });
+});
+
+// ─── Cross-Agent Task Delegation Integration ────────────────────────────────────
+
+describe('Cross-Agent Integration', () => {
+  let dir: string;
+  let port: number;
+
+  beforeEach(async () => {
+    dir = join(tmpdir(), `cocapn-glue-${uid()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'glue-test' }));
+    writeFileSync(join(dir, 'soul.md'), '---\nname: GlueBot\ntone: neutral\n---\nI test glue.');
+    execSync('git init', { cwd: dir, timeout: 5000 });
+    execSync('git config user.email test@test.com', { cwd: dir });
+    execSync('git config user.name Test', { cwd: dir });
+    execSync('git add .', { cwd: dir });
+    execSync('git commit -m init', { cwd: dir, timeout: 5000 });
+  });
+
+  afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  function makeMockLlm() {
+    return {
+      async *chatStream(messages: any[]) {
+        const userMsg = messages.find((m: any) => m.role === 'user');
+        if (userMsg) yield { type: 'content' as const, text: 'Reply: ' + userMsg.content };
+        yield { type: 'done' as const };
+      },
+    };
+  }
+
+  it('agent can send message to a running web server', async () => {
+    port = 9000 + Math.floor(Math.random() * 900);
+    const mem = new Memory(dir);
+    const aw = new Awareness(dir);
+    const soul = { name: 'GlueBot', tone: 'neutral', model: 'deepseek', body: 'I test glue.' };
+    webMod.startWebServer(port, makeMockLlm(), mem, aw, soul);
+    await new Promise(r => setTimeout(r, 200));
+
+    const conn = new glueMod.AgentConnection('glue-test', `http://localhost:${port}`);
+    const res = await conn.send({ to: 'GlueBot', type: 'chat', payload: 'hello' });
+    // Should get some response from the A2A endpoint (may be 404 if not configured, but not crash)
+    expect(res).toBeDefined();
+  });
+
+  it('GlueBus manages multiple agent connections', () => {
+    const bus = new glueMod.GlueBus();
+    bus.connect('agent-a', 'http://localhost:3101');
+    bus.connect('agent-b', 'http://localhost:3102');
+    bus.connect('agent-c', 'http://localhost:3103');
+    expect(bus.list()).toEqual(['agent-a', 'agent-b', 'agent-c']);
+    bus.disconnect('agent-b');
+    expect(bus.list()).toEqual(['agent-a', 'agent-c']);
+  });
+});

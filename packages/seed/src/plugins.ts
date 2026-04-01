@@ -1,14 +1,18 @@
 /**
  * Plugins — extensible plugin system for cocapn.
  *
- * Loads JS files from cocapn/plugins/*.js. Each exports a Plugin object.
- * Hooks run in load order. Plugin errors are caught and logged, never crash.
- * Zero dependencies.
+ * Two layers:
+ * 1. PluginLoader — loads JS files from cocapn/plugins/*.js (existing)
+ * 2. PluginRegistry — named plugin loading, install, built-ins (new)
+ *
+ * Built-in plugins: vision, research, analytics, channels, a2a.
+ * Plugin errors are caught and logged, never crash. Zero dependencies.
  */
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { execSync } from 'node:child_process';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -18,6 +22,7 @@ export interface ChatContext {
   [key: string]: unknown;
 }
 
+/** Legacy plugin shape (file-based) */
 export interface Plugin {
   name: string;
   version: string;
@@ -29,7 +34,48 @@ export interface Plugin {
   };
 }
 
-// ─── PluginLoader ──────────────────────────────────────────────────────────────
+/** Extended plugin shape (registry-based) */
+export interface Command { name: string; description: string; run: (args: string) => Promise<string>; }
+export interface Route { method: string; path: string; handler: (req: unknown) => Promise<unknown>; }
+
+export interface ExtPlugin {
+  name: string;
+  version: string;
+  hooks: string[];
+  commands?: Command[];
+  api?: Route[];
+  init?(config: Record<string, unknown>): Promise<void>;
+}
+
+// ─── Built-in plugins ──────────────────────────────────────────────────────────
+
+const BUILT_INS: ExtPlugin[] = [
+  {
+    name: 'vision', version: '0.1.0', hooks: ['after-chat'],
+    commands: [{ name: 'generate', description: 'Generate image', run: async (a) => `Generating: ${a}` }],
+  },
+  {
+    name: 'research', version: '0.1.0', hooks: ['periodic'],
+    commands: [{ name: 'research', description: 'Research a topic', run: async (a) => `Researching: ${a}` }],
+  },
+  {
+    name: 'analytics', version: '0.1.0', hooks: ['after-chat', 'periodic'],
+    commands: [{ name: 'analytics', description: 'Show usage stats', run: async () => 'Analytics: no data yet' }],
+  },
+  {
+    name: 'channels', version: '0.1.0', hooks: ['before-chat', 'after-chat'],
+    commands: [{ name: 'channels', description: 'List channels', run: async () => 'Channels: none' }],
+  },
+  {
+    name: 'a2a', version: '0.1.0', hooks: ['before-chat'],
+    commands: [
+      { name: 'a2a-connect', description: 'Connect to agent', run: async (a) => `Connecting to ${a}` },
+      { name: 'a2a-peers', description: 'List peers', run: async () => 'No peers' },
+    ],
+  },
+];
+
+// ─── PluginLoader (file-based, existing) ────────────────────────────────────────
 
 export class PluginLoader {
   plugins: Plugin[] = [];
@@ -93,5 +139,89 @@ export class PluginLoader {
       name: p.name, version: p.version,
       commands: p.hooks.command ? Object.keys(p.hooks.command) : [],
     }));
+  }
+}
+
+// ─── PluginRegistry (named plugins, install, built-ins) ────────────────────────
+
+export class PluginRegistry {
+  private registry = new Map<string, ExtPlugin>();
+  private repoDir: string;
+  private log: (msg: string) => void;
+
+  constructor(repoDir: string, log?: (msg: string) => void) {
+    this.repoDir = repoDir;
+    this.log = log ?? ((m: string) => console.info(`[cocapn:registry] ${m}`));
+    for (const p of BUILT_INS) this.registry.set(p.name, p);
+    this.loadManifest();
+  }
+
+  /** Load a plugin by name (built-in or installed) */
+  loadPlugin(name: string): ExtPlugin | undefined {
+    return this.registry.get(name);
+  }
+
+  /** List all available plugins */
+  listPlugins(): Array<{ name: string; version: string; hooks: string[]; commands: number }> {
+    return [...this.registry.values()].map(p => ({
+      name: p.name, version: p.version, hooks: p.hooks,
+      commands: p.commands?.length ?? 0,
+    }));
+  }
+
+  /** Install a plugin from npm or git URL */
+  async installPlugin(name: string): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const pluginDir = join(this.repoDir, 'cocapn', 'plugins');
+      mkdirSync(pluginDir, { recursive: true });
+      const target = name.startsWith('http') || name.includes('/') ? name : `cocapn-plugin-${name}`;
+      execSync(`npm install --prefix ${pluginDir} ${target}`, { stdio: 'pipe', timeout: 60000 });
+      this.log(`installed ${name}`);
+      this.saveManifest();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  }
+
+  /** Initialize all registered plugins */
+  async initAll(config: Record<string, unknown>): Promise<void> {
+    for (const [, plugin] of this.registry) {
+      if (plugin.init) {
+        try { await plugin.init(config); } catch (e) { this.log(`${plugin.name} init: ${String(e)}`); }
+      }
+    }
+  }
+
+  /** Get commands from all registered plugins */
+  getCommands(): Command[] {
+    return [...this.registry.values()].flatMap(p => p.commands ?? []);
+  }
+
+  /** Get API routes from all registered plugins */
+  getRoutes(): Route[] {
+    return [...this.registry.values()].flatMap(p => p.api ?? []);
+  }
+
+  /** Save manifest of installed plugins */
+  private saveManifest(): void {
+    const manifest = [...this.registry.values()].map(p => ({ name: p.name, version: p.version }));
+    const dir = join(this.repoDir, 'cocapn');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'plugins.json'), JSON.stringify(manifest, null, 2));
+  }
+
+  /** Load manifest from disk */
+  private loadManifest(): void {
+    const p = join(this.repoDir, 'cocapn', 'plugins.json');
+    if (!existsSync(p)) return;
+    try {
+      const entries = JSON.parse(readFileSync(p, 'utf-8')) as Array<{ name: string; version: string }>;
+      for (const e of entries) {
+        if (!this.registry.has(e.name)) {
+          this.registry.set(e.name, { name: e.name, version: e.version, hooks: [] });
+        }
+      }
+    } catch { /* skip corrupt manifest */ }
   }
 }

@@ -23,12 +23,14 @@ import { Awareness } from './awareness.js';
 import { loadSoul, soulToSystemPrompt } from './soul.js';
 import type { Soul } from './soul.js';
 import { startWebServer } from './web.js';
-import { PluginLoader } from './plugins.js';
+import { PluginLoader, PluginRegistry } from './plugins.js';
 import type { ChatContext } from './plugins.js';
 import { A2AHub } from './a2a.js';
 import { Knowledge } from './knowledge.js';
 import { startMcpServer } from './mcp.js';
 import { generateRepoMap } from './repo-map.js';
+import { GlueBus } from './glue.js';
+import { startResearch } from './research-daemon.js';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
@@ -582,12 +584,27 @@ async function main(): Promise<void> {
   const pluginLoader = new PluginLoader();
   await pluginLoader.load(join(repoDir, 'cocapn', 'plugins'));
 
+  // Initialize plugin registry (built-ins + installed)
+  const pluginRegistry = new PluginRegistry(repoDir);
+  await pluginRegistry.initAll(config);
+
   // Initialize A2A hub
   const a2aSecret = A2AHub.loadSecret(repoDir);
   const a2a = a2aSecret ? new A2AHub(soul.name, '', a2aSecret) : undefined;
 
   // Initialize knowledge base
   const knowledge = new Knowledge(repoDir);
+
+  // Initialize glue bus for cross-agent communication
+  const glue = new GlueBus();
+
+  // Auto-discover connected agents from config
+  const peers = (config as Record<string, unknown>).peers as Array<{ id: string; url: string }> | undefined;
+  if (peers) for (const p of peers) glue.connect(p.id, p.url);
+
+  // Start research daemon if configured
+  const rdConfig = (config as Record<string, unknown>).research as { enabled?: boolean; cron?: string } | undefined;
+  if (rdConfig?.enabled) startResearch('auto-research');
 
   if (args.positionals[0] === 'whoami') {
     console.log(cmdWhoami(awareness, memory));
