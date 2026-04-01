@@ -1,72 +1,159 @@
 {
   "name": "cocapn-vscode",
   "displayName": "Cocapn — Your Repo Is Alive",
-  "description": "The repo IS the agent. Brain, wiki, chat, and fleet status — right in your editor.",
-  "version": "0.1.0",
+  "description": "The repo IS the agent. Chat, commands, diagnostics, and fleet status — right in your editor.",
+  "version": "0.2.0",
   "publisher": "cocapn",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other"
+    "Programming Languages",
+    "Machine Learning",
+    "Chat"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "chat",
+    "cocapn"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:cocapn.openChat",
+    "onCommand:cocapn.explainFile",
+    "onCommand:cocapn.whatChanged",
+    "onCommand:cocapn.refactorSuggest",
+    "onCommand:cocapn.impactAnalysis",
+    "onCommand:cocapn.generateTests",
+    "onCommand:cocapn.repoStatus"
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "cocapn.start",
-        "title": "Cocapn: Start"
-      },
-      {
-        "command": "cocapn.stop",
-        "title": "Cocapn: Stop"
-      },
-      {
-        "command": "cocapn.status",
-        "title": "Cocapn: Status"
-      },
-      {
-        "command": "cocapn.chat",
-        "title": "Cocapn: Chat"
-      },
-      {
-        "command": "cocapn.setup",
-        "title": "Cocapn: Setup"
-      },
-      {
-        "command": "cocapn.refreshTree",
-        "title": "Cocapn: Refresh Sidebar",
-        "icon": "$(refresh)"
-      }
-    ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "cocapn-sidebar",
           "title": "Cocapn",
-          "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI0Ii8+PHBhdGggZD0iTTUuOCA4LjZsMiAyIi8+PHBhdGggZD0iTTE2LjIgOC42bC0yIDIiLz48cGF0aCBkPSJNOCAxNmwxLjYtMS42Ii8+PHBhdGggZD0iTTE0IDE2bC0xLjYtMS42Ii8+PC9zdmc+"
+          "icon": "media/icon.svg"
         }
       ]
     },
     "views": {
       "cocapn-sidebar": [
         {
-          "id": "cocapn.tree",
-          "name": "Brain"
+          "type": "webview",
+          "id": "cocapn.chatView",
+          "name": "Chat"
         }
       ]
     },
-    "viewsWelcome": [
+    "commands": [
       {
-        "view": "cocapn.tree",
-        "contents": "No cocapn project detected.\n[Cocapn: Setup](command:cocapn.setup)"
+        "command": "cocapn.openChat",
+        "title": "Cocapn: Open chat"
+      },
+      {
+        "command": "cocapn.explainFile",
+        "title": "Cocapn: Explain this file"
+      },
+      {
+        "command": "cocapn.whatChanged",
+        "title": "Cocapn: What changed here?"
+      },
+      {
+        "command": "cocapn.refactorSuggest",
+        "title": "Cocapn: How should I refactor this?"
+      },
+      {
+        "command": "cocapn.impactAnalysis",
+        "title": "Cocapn: What are the implications of changing this?"
+      },
+      {
+        "command": "cocapn.generateTests",
+        "title": "Cocapn: Generate tests for this"
+      },
+      {
+        "command": "cocapn.repoStatus",
+        "title": "Cocapn: Show repo status"
+      },
+      {
+        "command": "cocapn.askAboutCode",
+        "title": "Cocapn: Ask about this code"
+      },
+      {
+        "command": "cocapn.explainFunction",
+        "title": "Cocapn: Explain this function"
+      },
+      {
+        "command": "cocapn.findRelated",
+        "title": "Cocapn: Find related code"
+      },
+      {
+        "command": "cocapn.getRefactorSuggestions",
+        "title": "Cocapn: Get refactoring suggestions"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "cocapn.askAboutCode",
+          "when": "editorHasSelection",
+          "group": "cocapn@1"
+        },
+        {
+          "command": "cocapn.explainFunction",
+          "when": "editorHasSelection",
+          "group": "cocapn@2"
+        },
+        {
+          "command": "cocapn.findRelated",
+          "when": "editorHasSelection",
+          "group": "cocapn@3"
+        },
+        {
+          "command": "cocapn.getRefactorSuggestions",
+          "when": "editorHasSelection",
+          "group": "cocapn@4"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Cocapn",
+      "properties": {
+        "cocapn.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:3100",
+          "description": "URL of the cocapn bridge server"
+        },
+        "cocapn.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the cocapn bridge"
+        },
+        "cocapn.autoWatch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically notify agent when files change"
+        },
+        "cocapn.enableDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show agent suggestions as editor diagnostics"
+        }
+      }
+    }
   },
   "scripts": {
-    "build": "cp src/*.js out/"
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pack": "npx vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
   }
 }
