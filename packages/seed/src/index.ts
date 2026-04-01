@@ -586,7 +586,7 @@ async function main(): Promise<void> {
 
   // Initialize plugin registry (built-ins + installed)
   const pluginRegistry = new PluginRegistry(repoDir);
-  await pluginRegistry.initAll(config);
+  await pluginRegistry.initAll(config as Record<string, unknown>);
 
   // Initialize A2A hub
   const a2aSecret = A2AHub.loadSecret(repoDir);
