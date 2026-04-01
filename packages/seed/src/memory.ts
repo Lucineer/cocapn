@@ -101,9 +101,11 @@ export class Memory {
       this.archiveOldMessages();
     }
 
-    // Trim to max (after archival, keep the most recent)
+    // Trim to max (archiving any overflow instead of dropping)
     if (this.data.messages.length > MAX_MESSAGES) {
+      const overflow = this.data.messages.slice(0, this.data.messages.length - MAX_MESSAGES);
       this.data.messages = this.data.messages.slice(-MAX_MESSAGES);
+      if (overflow.length > 0) this.archiveBatch(overflow);
     }
 
     // Update user stats
@@ -243,50 +245,51 @@ export class Memory {
     const messages = this.data.messages;
     if (messages.length <= MAX_MESSAGES) return;
 
-    // Archive messages from the beginning up to (length - MAX_MESSAGES)
     const toArchive = messages.slice(0, messages.length - MAX_MESSAGES);
     if (toArchive.length === 0) return;
 
-    // Split into batches for manageable archive files
-    let offset = 0;
-    const index = this.loadIndex();
+    this.archiveBatch(toArchive);
+    this.data.messages = messages.slice(-MAX_MESSAGES);
+  }
 
-    while (offset < toArchive.length) {
-      const batch = toArchive.slice(offset, offset + MESSAGES_PER_ARCHIVE);
-      if (batch.length === 0) break;
+  /** Archive a batch of messages to disk and update the index */
+  private archiveBatch(batch: Message[]): void {
+    if (batch.length === 0) return;
+
+    const index = this.loadIndex();
+    let offset = 0;
+
+    while (offset < batch.length) {
+      const chunk = batch.slice(offset, offset + MESSAGES_PER_ARCHIVE);
+      if (chunk.length === 0) break;
 
       const archiveId = `archive-${Date.now()}-${offset}`;
       const archiveFile = `${archiveId}.json`;
 
-      // Extract keywords from messages for the index
-      const keywords = this.extractKeywords(batch);
-
+      const keywords = this.extractKeywords(chunk);
       const entry: ArchiveEntry = {
         id: archiveId,
-        startTs: batch[0].ts,
-        endTs: batch[batch.length - 1].ts,
-        messageCount: batch.length,
+        startTs: chunk[0].ts,
+        endTs: chunk[chunk.length - 1].ts,
+        messageCount: chunk.length,
         keywords,
         file: archiveFile,
       };
 
-      // Write archive file
       if (!existsSync(this.archiveDir)) mkdirSync(this.archiveDir, { recursive: true });
       writeFileSync(
         join(this.archiveDir, archiveFile),
-        JSON.stringify({ id: archiveId, messages: batch }, null, 2),
+        JSON.stringify({ id: archiveId, messages: chunk }, null, 2),
         'utf-8',
       );
 
       index.archives.push(entry);
-      index.totalArchivedMessages += batch.length;
+      index.totalArchivedMessages += chunk.length;
       index.lastArchived = new Date().toISOString();
 
       offset += MESSAGES_PER_ARCHIVE;
     }
 
-    // Keep only the most recent messages
-    this.data.messages = messages.slice(-MAX_MESSAGES);
     this.saveIndex(index);
   }
 

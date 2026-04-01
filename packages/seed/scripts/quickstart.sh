@@ -1,141 +1,74 @@
 #!/bin/bash
 set -e
+BOLD='\033[1m'; CYAN='\033[36m'; GREEN='\033[32m'; RESET='\033[0m'
 
-# cocapn quickstart — verify your repo is alive
-# Usage: bash quickstart.sh
+# ─── Check Node.js ──────────────────────────────────────────────────────────
+if ! command -v node &>/dev/null; then echo "Node.js required: https://nodejs.org"; exit 1; fi
+NODE_MAJOR=$(node -v | sed 's/v//' | cut -d. -f1)
+if [ "$NODE_MAJOR" -lt 18 ]; then echo "Node.js 18+ required (found $(node -v))"; exit 1; fi
 
-BOLD='\033[1m'
-CYAN='\033[36m'
-GREEN='\033[32m'
-GRAY='\033[90m'
-RED='\033[31m'
-RESET='\033[0m'
+# ─── Create directory ───────────────────────────────────────────────────────
+DIR="${1:-my-agent}"
+mkdir -p "$DIR" && cd "$DIR"
 
-PASS=0
-FAIL=0
+# ─── Init git ───────────────────────────────────────────────────────────────
+git init -q
+git config user.email "agent@cocapn.dev" 2>/dev/null || true
+git config user.name "Agent" 2>/dev/null || true
 
-check() {
-  local label="$1"
-  local result="$2"
-  if [ "$result" = "pass" ]; then
-    echo -e "  ${GREEN}✓${RESET} $label"
-    PASS=$((PASS + 1))
-  else
-    echo -e "  ${RED}✗${RESET} $label"
-    FAIL=$((FAIL + 1))
-  fi
+# ─── cocapn.json ────────────────────────────────────────────────────────────
+mkdir -p cocapn
+cat > cocapn/cocapn.json << 'CONF'
+{
+  "name": "my-agent",
+  "model": "deepseek",
+  "tone": "friendly",
+  "port": 3100,
+  "channels": ["cli", "web"]
 }
+CONF
+
+# ─── soul.md ────────────────────────────────────────────────────────────────
+cat > cocapn/soul.md << 'SOUL'
+---
+name: MyAgent
+tone: friendly
+---
+
+I am MyAgent, a cocapn agent. I live inside this repository.
+I remember conversations, learn from code changes, and grow over time.
+Edit this file to change who I am.
+SOUL
+
+# ─── README.md ──────────────────────────────────────────────────────────────
+cat > README.md << 'README'
+# My Agent
+
+A living repository powered by [cocapn](https://github.com/Lucineer/cocapn).
+
+## Quick Start
+```bash
+export DEEPSEEK_API_KEY=your-key   # or OPENAI_API_KEY
+npx cocapn                         # start chatting
+```
+
+## Customize
+- `cocapn/soul.md` — personality and identity
+- `cocapn/cocapn.json` — model, tone, channels
+README
+
+# ─── Install cocapn ─────────────────────────────────────────────────────────
+npm init -y --silent > /dev/null 2>&1
+npm install cocapn --silent 2>/dev/null || echo "  (npm install skipped — run manually)"
+
+# ─── Commit ─────────────────────────────────────────────────────────────────
+git add -A && git commit -q -m "init: cocapn agent"
 
 echo ''
-echo -e "${CYAN}${BOLD}cocapn quickstart check${RESET}"
-echo -e "${GRAY}Verifying your repo is alive...${RESET}"
+echo -e "${GREEN}${BOLD}Your agent is alive!${RESET}"
 echo ''
-
-# ─── 1. Check cocapn directory ─────────────────────────────────────────────
-
-if [ -d "cocapn" ]; then
-  check "cocapn/ directory exists" "pass"
-else
-  check "cocapn/ directory exists" "fail"
-  echo -e "  ${GRAY}Run: bash scripts/install.sh${RESET}"
-fi
-
-# ─── 2. Check soul.md ──────────────────────────────────────────────────────
-
-if [ -f "cocapn/soul.md" ]; then
-  check "soul.md exists" "pass"
-  LINES=$(wc -l < cocapn/soul.md)
-  if [ "$LINES" -gt 10 ]; then
-    check "soul.md has content ($LINES lines)" "pass"
-  else
-    check "soul.md has content ($LINES lines — expected >10)" "fail"
-  fi
-else
-  check "soul.md exists" "fail"
-fi
-
-# ─── 3. Check cocapn.json ──────────────────────────────────────────────────
-
-if [ -f "cocapn/cocapn.json" ]; then
-  check "cocapn.json exists" "pass"
-  if node -e "JSON.parse(require('fs').readFileSync('cocapn/cocapn.json','utf-8'))" 2>/dev/null; then
-    check "cocapn.json is valid JSON" "pass"
-  else
-    check "cocapn.json is valid JSON" "fail"
-  fi
-else
-  check "cocapn.json exists" "fail"
-fi
-
-# ─── 4. Check Node.js ──────────────────────────────────────────────────────
-
-if command -v node &>/dev/null; then
-  NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
-  if [ "$NODE_VERSION" -ge 18 ]; then
-    check "Node.js $(node -v) (18+ required)" "pass"
-  else
-    check "Node.js $(node -v) — needs 18+" "fail"
-  fi
-else
-  check "Node.js installed" "fail"
-fi
-
-# ─── 5. Check API key ─────────────────────────────────────────────────────
-
-HAS_KEY=false
-if [ -n "$DEEPSEEK_API_KEY" ]; then
-  check "DEEPSEEK_API_KEY in environment" "pass"
-  HAS_KEY=true
-elif [ -f ~/.cocapn/secrets.json ]; then
-  if grep -q 'DEEPSEEK_API_KEY' ~/.cocapn/secrets.json 2>/dev/null; then
-    check "DEEPSEEK_API_KEY in ~/.cocapn/secrets.json" "pass"
-    HAS_KEY=true
-  fi
-fi
-if [ "$HAS_KEY" = "false" ]; then
-  check "API key available" "fail"
-  echo -e "  ${GRAY}Set: export DEEPSEEK_API_KEY=your-key${RESET}"
-fi
-
-# ─── 6. Test chat (if key available) ───────────────────────────────────────
-
-if [ "$HAS_KEY" = "true" ] && [ -f "cocapn/soul.md" ]; then
-  echo ''
-  echo -e "${GRAY}Testing chat...${RESET}"
-  RESPONSE=$(echo "Say exactly: cocapn alive" | timeout 30 npx cocapn 2>/dev/null || true)
-  if echo "$RESPONSE" | grep -qi "alive\|cocapn"; then
-    check "Chat responds" "pass"
-  else
-    check "Chat responds" "fail"
-    echo -e "  ${GRAY}Response: $(echo "$RESPONSE" | head -3)${RESET}"
-  fi
-fi
-
-# ─── 7. Check memory file ──────────────────────────────────────────────────
-
-if [ -f "cocapn/memory.json" ]; then
-  check "Memory file created (cocapn/memory.json)" "pass"
-  SIZE=$(wc -c < cocapn/memory.json)
-  check "Memory has data ($SIZE bytes)" "pass"
-else
-  if [ "$HAS_KEY" = "true" ]; then
-    check "Memory file created (cocapn/memory.json)" "fail"
-    echo -e "  ${GRAY}Memory is created on first chat${RESET}"
-  else
-    echo -e "  ${GRAY}○ Memory file (created on first chat)${RESET}"
-  fi
-fi
-
-# ─── Result ────────────────────────────────────────────────────────────────
-
-echo ''
-if [ "$FAIL" -eq 0 ]; then
-  echo -e "${GREEN}${BOLD}All checks passed!${RESET} Your repo is alive."
-  echo ''
-  echo -e "  ${CYAN}npx cocapn${RESET}       Start chatting"
-  echo -e "  ${CYAN}npx cocapn --web${RESET}   Web interface"
-else
-  echo -e "${RED}${BOLD}$FAIL check(s) failed.${RESET} Fix above and re-run."
-  exit 1
-fi
+echo -e "  ${CYAN}cd $DIR${RESET}"
+echo -e "  ${CYAN}export DEEPSEEK_API_KEY=your-key${RESET}   # or OPENAI_API_KEY"
+echo -e "  ${CYAN}npx cocapn${RESET}                         # start chatting"
+echo -e "  ${CYAN}npx cocapn --web${RESET}                   # web UI at http://localhost:3100"
 echo ''

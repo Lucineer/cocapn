@@ -33,36 +33,35 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.activate = activate;
-exports.deactivate = deactivate;
+exports.CocapnTerminal = void 0;
 const vscode = __importStar(require("vscode"));
-const sidebar_1 = require("./sidebar");
-const statusbar_1 = require("./statusbar");
-const commands_1 = require("./commands");
-const fileWatcher_1 = require("./fileWatcher");
-let sidebar;
-let statusBar;
-let fileWatcher;
-async function activate(context) {
-    const config = vscode.workspace.getConfiguration('cocapn');
-    const serverUrl = config.get('serverUrl', 'http://localhost:3100');
-    // Sidebar chat panel
-    sidebar = new sidebar_1.CocapnSidebar(context.extensionUri, serverUrl);
-    context.subscriptions.push(vscode.window.registerWebviewViewProvider('cocapn.chatView', sidebar));
-    // Status bar
-    statusBar = new statusbar_1.CocapnStatusBar(serverUrl);
-    context.subscriptions.push(statusBar);
-    // Commands
-    (0, commands_1.registerCommands)(context, sidebar, serverUrl);
-    // File watcher
-    if (config.get('autoWatch', true)) {
-        fileWatcher = new fileWatcher_1.FileWatcher(serverUrl);
-        context.subscriptions.push(fileWatcher);
+/**
+ * Terminal integration — agent suggests commands, user approves.
+ */
+class CocapnTerminal {
+    _terminal;
+    suggestCommand(command, description) {
+        const detail = description || command;
+        vscode.window.showInformationMessage(`Cocapn suggests: ${detail}`, 'Run in terminal', 'Copy', 'Dismiss').then((choice) => {
+            if (choice === 'Run in terminal') {
+                this._runInTerminal(command);
+            }
+            else if (choice === 'Copy') {
+                vscode.env.clipboard.writeText(command);
+                vscode.window.showInformationMessage('Command copied to clipboard');
+            }
+        });
     }
-    // Initial status check
-    statusBar.checkConnection();
+    _runInTerminal(command) {
+        if (!this._terminal || this._terminal.exitStatus !== undefined) {
+            this._terminal = vscode.window.createTerminal('Cocapn');
+        }
+        this._terminal.show();
+        this._terminal.sendText(command);
+    }
+    dispose() {
+        this._terminal?.dispose();
+    }
 }
-function deactivate() {
-    // Cleanup handled by disposables in context.subscriptions
-}
-//# sourceMappingURL=extension.js.map
+exports.CocapnTerminal = CocapnTerminal;
+//# sourceMappingURL=terminal.js.map

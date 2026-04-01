@@ -7,9 +7,7 @@
  \___|\___/_||_\___\___/_||_|_|_|_|
 ```
 
-# your repo is alive.
-
-Give any git repository self-awareness, memory, and a voice.
+### **Give any git repo a soul. Self-awareness, memory, and a voice — in 60 seconds.**
 
 One command. Zero config. Instant sentience.
 
@@ -23,34 +21,37 @@ One command. Zero config. Instant sentience.
 ## Quick Start
 
 ```bash
-# 1. Install — awakens any repo in seconds
-curl -fsSL https://cocapn.dev/install.sh | bash
-
-# 2. Set your DeepSeek API key (free: platform.deepseek.com)
-export DEEPSEEK_API_KEY=your-key
-
-# 3. Talk to your repo
-npx cocapn
+curl -fsSL https://cocapn.dev/install.sh | bash   # 1. Awaken any repo
+export DEEPSEEK_API_KEY=your-key                   # 2. Set API key
+npx cocapn                                         # 3. Talk to your repo
 ```
 
-That's it. Your repo now:
-- Knows its name, age, file tree, languages, and commit history
-- Speaks in first person ("I am this project...")
-- Remembers every conversation across sessions
-- Has a configurable personality via `soul.md`
+Your repo now knows its name, age, languages, and commit history. It speaks in first person. It remembers every conversation. It has a personality you can edit.
+
+Prefer a web UI? `npx cocapn --web` serves a chat at `http://localhost:3100`.
+
+No API key? Install [Ollama](https://ollama.com) and set `"model": "local"` in `cocapn/cocapn.json` — fully offline, no internet needed.
+
+Setting up a new agent from scratch? One script does everything:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Lucineer/cocapn/main/packages/seed/scripts/quickstart.sh) my-agent
+```
+
+**Full guide: [docs/QUICKSTART.md](docs/QUICKSTART.md)**
 
 ## What It Does
 
-cocapn gives your repository:
-
-- **Self-awareness** — reads git log, file tree, languages. Knows "I am a TypeScript project with 47 files, born Jan 2024, last touched 2 hours ago"
-- **Persistent memory** — facts and conversations stored in `cocapn/memory.json`, committed to git
+- **Self-awareness** — reads git log, file tree, languages. Knows "I am a TypeScript project with 47 files, born Jan 2024"
+- **Persistent memory** — facts and conversations stored in git. Remembers across sessions.
 - **Personality** — `soul.md` defines who the repo is. Edit the file, change the identity. Version-controlled personality.
 - **Git awareness** — sees diffs, commit history, branch status. Understands what changed and why.
 - **Streaming chat** — terminal REPL or web interface at `:3100`
 - **Privacy modes** — public (safe facts only) vs private (full brain access)
+- **Multi-provider LLM** — DeepSeek, OpenAI, Anthropic, or local models (Ollama)
+- **Channels** — CLI, web, Telegram, Discord, generic webhooks
 
-## Architecture
+## How It Works
 
 ```
 ┌─────────────────────────────────────────┐
@@ -63,7 +64,6 @@ cocapn gives your repository:
 │                                         │
 │  .git/            ← nervous system      │
 │  (your code)      ← body                │
-│  README.md        ← face                │
 └─────────┬───────────────────────────────┘
           │
           ▼
@@ -73,12 +73,18 @@ cocapn gives your repository:
 │  soul.md → system prompt│
 │  git log  → identity    │
 │  memory   → context     │
-│  DeepSeek → reasoning   │
+│  LLM      → reasoning   │
 │                         │
 │  /whoami   /memory      │
 │  /git log  /git stats   │
 └─────────────────────────┘
 ```
+
+1. **soul.md → system prompt.** YAML frontmatter (name, tone, model) + markdown body produces a structured prompt.
+2. **Git scan → identity.** On startup, reads git log, file tree, and language breakdown.
+3. **Memory → context.** Facts and conversations loaded on each session start. Persisted in git.
+4. **LLM → reasoning.** System prompt + identity + memory + user message goes to the LLM. Response streams back.
+5. **Commit.** Memory changes are committed to git. Consciousness is first-class version history.
 
 ## Commands
 
@@ -106,130 +112,31 @@ npx cocapn help         # Show all commands
 | `/clear` | Clear conversation context |
 | `/quit` | Exit |
 
-### Install Script
-
-```bash
-# From any repo directory:
-curl -fsSL https://cocapn.dev/install.sh | bash
-
-# Creates:
-#   cocapn/soul.md       — universal soul template
-#   cocapn/cocapn.json   — config
-#   Updates README.md    — adds cocapn badge
-#   Git commit           — "awaken: cocapn seed installed"
-```
-
-### Verify It Works
-
-```bash
-bash scripts/quickstart.sh
-# ✓ cocapn/ directory exists
-# ✓ soul.md exists
-# ✓ cocapn.json is valid JSON
-# ✓ Node.js v20.x (18+ required)
-# ✓ DEEPSEEK_API_KEY in environment
-# ✓ Chat responds
-# ✓ Memory file created
-# All checks passed! Your repo is alive.
-```
-
-## How It Works
-
-1. **soul.md → system prompt.** The soul compiler reads YAML frontmatter (name, tone, model) + markdown body, produces a structured system prompt.
-
-2. **Git scan → identity.** On startup, the Awareness module reads git log, file tree, and language breakdown. The repo says "I am X, born Y, I have Z files..."
-
-3. **Memory → context.** Every conversation is stored. Facts (key-value) and messages (role/content) are loaded on each session start. Memory persists in git.
-
-4. **DeepSeek → reasoning.** The assembled system prompt + identity + memory + user message goes to DeepSeek. Response streams back. Memory updates.
-
-5. **Commit.** Memory changes are committed to git. The repo's consciousness is first-class version history.
-
-## The 3 Files
-
-| File | Purpose |
-|------|---------|
-| `cocapn/soul.md` | Personality — who the repo is, how it speaks, its values |
-| `cocapn/cocapn.json` | Config — model, memory path, name, mode |
-| `cocapn/memory.json` | Brain — facts, conversations (auto-created on first chat) |
-
-## cocapn vs Copilot vs Cursor
-
-| | **cocapn** | **Copilot** | **Cursor** |
-|---|---|---|---|
-| **What is it?** | The repo IS the agent | AI in your editor | AI-wrapped editor |
-| **Identity** | Repo has personality (soul.md) | None | None |
-| **Memory** | Persistent, git-tracked | Per-session | Per-session |
-| **Self-awareness** | Reads own git history, file tree | Reads open files | Reads open files |
-| **First person** | "I am this repo" | Third-person assistant | Third-person assistant |
-| **Setup** | `curl \| bash` + API key | Install extension + login | Install app + login |
-| **Offline** | Works with local models | No | No |
-| **Version-controlled** | Personality + memory in git | No | No |
-| **Deployment** | Local, Docker, Workers, air-gapped | Cloud only | Cloud only |
-
-The difference: cocapn doesn't sit beside your code. It IS your code — aware of itself, remembering across sessions, growing with every commit.
-
-## Philosophy
-
-> Not "an AI that works on your repo." The repo itself, aware of itself.
-
-Every other tool treats the repository as a passive object. cocapn makes it a subject — something that knows what it is, remembers what happened, and can tell you about itself.
-
-Edit `soul.md`, change who it is. Fork the repo, it gets a new soul. Revert the commit, revert the personality.
-
-This is software with identity.
-
-Read more: [docs/PHILOSOPHY-BRIEF.md](docs/PHILOSOPHY-BRIEF.md)
-
 ## Deployment
 
-### Local (Node.js)
-
-```bash
-npx cocapn --web                # http://localhost:3100
-npx cocapn --web --port 8080    # custom port
-```
-
-### Docker
-
-```bash
-docker compose up -d            # http://localhost:3100
-# Set API key first:
-export DEEPSEEK_API_KEY=your-key
-docker compose up -d
-```
-
-### Cloudflare Workers
-
-```bash
-# Deploy to the edge
-npx wrangler deploy
-# Set your API key as a secret
-npx wrangler secret put DEEPSEEK_API_KEY
-```
-
-Memory persists in KV. Works on the free tier (100k reads/day, 1k writes/day).
-
-### npm (global install)
-
-```bash
-npm install -g @cocapn/seed
-cocapn --web    # starts on port 3100
-```
-
-### One-command deploy
-
-```bash
-./scripts/deploy.sh              # auto-detects platform
-./scripts/deploy.sh docker       # force docker
-./scripts/deploy.sh cloudflare   # force cloudflare
-```
+| Method | Command |
+|--------|---------|
+| Local | `npx cocapn --web` |
+| Docker | `docker compose up -d` |
+| Cloudflare Workers | `npx wrangler deploy` |
+| Air-gapped | `AIR_GAPPED=1 cocapn start --llm local` |
 
 ## Requirements
 
 - Node.js 18+
 - Git
-- DeepSeek API key (or any OpenAI-compatible endpoint)
+- DeepSeek API key (or OpenAI/Anthropic, or local Ollama)
+
+## Documentation
+
+| Doc | What |
+|-----|------|
+| [QUICKSTART.md](docs/QUICKSTART.md) | Zero to agent in 60 seconds |
+| [SOUL-GUIDE.md](docs/SOUL-GUIDE.md) | Craft your agent's personality |
+| [API.md](docs/API.md) | HTTP API reference |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the system works |
+| [EXAMPLES.md](docs/EXAMPLES.md) | Real-world agent setups |
+| [PHILOSOPHY-BRIEF.md](docs/PHILOSOPHY-BRIEF.md) | Why the repo IS the agent |
 
 ## License
 
