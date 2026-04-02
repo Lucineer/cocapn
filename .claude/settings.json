@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Bash(npx wrangler *)",
+      "Bash(git *)",
+      "Bash(node *)",
+      "Bash(npm *)"
+    ],
+    "deny": []
+  },
+  "plugins": [],
+  "agentDefaults": {
+    "model": "claude-sonnet-4-20250514"
+  }
+}
