@@ -1,31 +1,3 @@
 node_modules/
-dist/
-# Demo apps (standalone repos)
-taskflow/
-shiplog/
-noteweave/
-*.cjs
-*.js.map
-*.d.ts.map
-.env
-.env.*
-.env.local
-.env.production
-*.secret.yml
-secrets/*.yml
-!secrets/*.yml.example
-*.age
-.DS_Store
-.remember/
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# External repos (cloned separately)
-fishinglog-ai/
-kimi-cli/
-businesslog/
-makerlog-ai/
-personallog/
+.wrangler/
+.dev.vars

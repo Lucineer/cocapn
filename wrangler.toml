@@ -1,0 +1,7 @@
+name = "cocapn"
+main = "src/worker.ts"
+compatibility_date = "2024-12-01"
+
+[[kv_namespaces]]
+binding = "COCAPN_KV"
+id = ""
