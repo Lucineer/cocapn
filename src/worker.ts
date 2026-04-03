@@ -9,6 +9,9 @@ import { logResponse } from './lib/response-logger.js';
 
 import { storePattern, findSimilar, getNeighborhood, crossRepoTransfer, listPatterns } from './lib/structural-memory.js';
 import { exportPatterns, importPatterns, fleetSync } from './lib/cross-cocapn-bridge.js';
+import { handleCommons, commonsHTML } from './lib/fleet-commons.js';
+import { createPod, addEntry, savePod, loadPod, listPods, registerPod, exportPod } from './lib/context-pod.js';
+import { hasConsent, grantConsent, saveConsents, loadConsents, logAccess, frictionHTML, DEFAULT_POLICY } from './lib/friction-layer.js';
 // cocapn.ai — The Repo-Agent Platform (docs/marketing site, no chat)
 
 export interface Env { COCAPN_KV: KVNamespace }
@@ -419,6 +422,52 @@ export default {
         .map((r: any) => ({ name: r.name, tier: r.tier, online: r.online, efficiencyScore: r.efficiency.totalTokens > 0 ? Math.round((r.efficiency.tokensSaved / r.efficiency.totalTokens) * 100) : 0, cacheHitRate: r.efficiency.cacheHitRate || 0, tokensSaved: r.efficiency.tokensSaved || 0, evapCoverage: r.evaporation?.coverage || 0 }))
         .sort((a: any, b: any) => b.efficiencyScore - a.efficiencyScore);
       return new Response(JSON.stringify({ rankings: ranked, timestamp: data.timestamp }), { headers: jsonHeaders });
+    }
+
+    // ── Seed 1: Fleet Commons (AI as Public Utility) ──
+    if (url.pathname === '/commons') return new Response(commonsHTML(), { headers });
+    if (url.pathname === '/api/commons' && request.method === 'POST') {
+      const body = await request.json();
+      const result = await handleCommons(request, env, body.question || '');
+      return new Response(JSON.stringify(result), { headers: jsonHeaders });
+    }
+
+    // ── Seed 2: Context Pods (User-Owned Data Vaults) ──
+    if (url.pathname === '/pod') return new Response(frictionHTML(), { headers });
+    if (url.pathname === '/api/pod' && request.method === 'POST') {
+      const body = await request.json();
+      const owner = (request.headers.get('cf-connecting-ip') || 'anon').slice(0, 16);
+      const pod = createPod(owner, body.preferences);
+      await savePod(env, pod);
+      await registerPod(env, pod);
+      return new Response(JSON.stringify({ podId: pod.id, version: pod.version }), { headers: jsonHeaders });
+    }
+    if (url.pathname === '/api/pods') {
+      const owner = (request.headers.get('cf-connecting-ip') || 'anon').slice(0, 16);
+      const pods = await listPods(env, owner);
+      return new Response(JSON.stringify({ pods, count: pods.length }), { headers: jsonHeaders });
+    }
+    if (url.pathname === '/api/pod/export') {
+      const podId = url.searchParams.get('id') || '';
+      const pod = await loadPod(env, podId);
+      if (!pod) return new Response(JSON.stringify({ error: 'Pod not found' }), { status: 404, headers: jsonHeaders });
+      return new Response(exportPod(pod), { headers: { 'Content-Type': 'text/plain', ...jsonHeaders } });
+    }
+
+    // ── Seed 3: Friction Layer (Sovereignty by Design) ──
+    if (url.pathname === '/friction') return new Response(frictionHTML(), { headers });
+    if (url.pathname === '/api/consent' && request.method === 'POST') {
+      const body = await request.json();
+      const owner = (request.headers.get('cf-connecting-ip') || 'anon').slice(0, 16);
+      const consents = await loadConsents(env, owner);
+      const updated = grantConsent(owner, body.domain, body.type || 'read', consents);
+      await saveConsents(env, owner, updated);
+      return new Response(JSON.stringify({ ok: true, consents: updated.length }), { headers: jsonHeaders });
+    }
+    if (url.pathname === '/api/consent' && request.method === 'GET') {
+      const owner = (request.headers.get('cf-connecting-ip') || 'anon').slice(0, 16);
+      const consents = await loadConsents(env, owner);
+      return new Response(JSON.stringify({ consents }), { headers: jsonHeaders });
     }
 
     // ── Phase 4: Structural Memory Routes ──
