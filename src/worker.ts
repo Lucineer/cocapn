@@ -1,3 +1,4 @@
+import { callLLM, generateSetupHTML } from './lib/byok.js';
 // cocapn.ai — The Repo-Agent Platform (docs/marketing site, no chat)
 
 export interface Env { COCAPN_KV: KVNamespace }
@@ -86,6 +87,24 @@ export default {
     const headers = { 'Content-Type': 'text/html;charset=utf-8', 'Content-Security-Policy': CSP };
     const jsonHeaders = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
 
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Authorization' } });
+    }
+
+    if (url.pathname === '/setup') {
+      return new Response(generateSetupHTML('cocapn', '#d4af37'), { headers: { 'Content-Type': 'text/html;charset=utf-8' } });
+    }
+
+    if (url.pathname === '/api/chat' && request.method === 'POST') {
+      try {
+        const body = await request.json();
+        const apiKey = (env as any)?.OPENAI_API_KEY || (env as any)?.ANTHROPIC_API_KEY || (env as any)?.GEMINI_API_KEY;
+        if (!apiKey) return new Response(JSON.stringify({ error: 'No API key configured. Visit /setup.' }), { status: 503, headers: jsonHeaders });
+        const messages = [{ role: 'system', content: 'You are Cocapn, an AI agent platform assistant.' }, ...(body.messages || [{ role: 'user', content: body.message || '' }])];
+        const resp = await callLLM(apiKey, messages);
+        return new Response(JSON.stringify({ response: resp }), { headers: jsonHeaders });
+      } catch (e: any) { return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: jsonHeaders }); }
+    }
     if (url.pathname === '/health') {
       return new Response(JSON.stringify({
         status: 'ok', service: 'cocapn.ai',
@@ -110,6 +129,6 @@ export default {
       }, null, 2), { headers: jsonHeaders });
     }
 
-    return new Response(landing(), { headers });
+    return new Response('{"error":"Not Found"}', { status: 404, headers: jsonHeaders });
   },
 };
