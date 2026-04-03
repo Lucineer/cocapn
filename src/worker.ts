@@ -2,10 +2,11 @@ import { evapPipeline, getEvapReport, getLockStats } from './lib/evaporation-pip
 import { selectModel } from './lib/model-router.js';
 import { trackConfidence, getConfidence } from './lib/confidence-tracker.js';
 import { callLLM, generateSetupHTML } from './lib/byok.js';
-import { evapPipeline } from './lib/evaporation-pipeline.js';
-
 import { deadbandCheck, deadbandStore, getEfficiencyStats } from './lib/deadband.js';
 import { logResponse } from './lib/response-logger.js';
+
+import { storePattern, findSimilar, getNeighborhood, crossRepoTransfer, listPatterns } from './lib/structural-memory.js';
+import { exportPatterns, importPatterns, fleetSync } from './lib/cross-cocapn-bridge.js';
 // cocapn.ai — The Repo-Agent Platform (docs/marketing site, no chat)
 
 export interface Env { COCAPN_KV: KVNamespace }
@@ -194,6 +195,37 @@ export default {
     if (url.pathname === '/api/confidence') {
       const scores = await getConfidence(env);
       return new Response(JSON.stringify(scores), { headers: jsonHeaders });
+    }
+    
+    // ── Phase 4: Structural Memory Routes ──
+    if (url.pathname === '/api/memory' && request.method === 'GET') {
+      const source = url.searchParams.get('source') || undefined;
+      const patterns = await listPatterns(env, source);
+      return new Response(JSON.stringify(patterns), { headers: jsonHeaders });
+    }
+    if (url.pathname === '/api/memory' && request.method === 'POST') {
+      const body = await request.json();
+      await storePattern(env, body);
+      return new Response(JSON.stringify({ ok: true, id: body.id }), { headers: jsonHeaders });
+    }
+    if (url.pathname === '/api/memory/similar') {
+      const structure = url.searchParams.get('structure') || '';
+      const threshold = parseFloat(url.searchParams.get('threshold') || '0.7');
+      const similar = await findSimilar(env, structure, threshold);
+      return new Response(JSON.stringify(similar), { headers: jsonHeaders });
+    }
+    if (url.pathname === '/api/memory/transfer') {
+      const fromRepo = url.searchParams.get('from') || '';
+      const toRepo = url.searchParams.get('to') || '';
+      const problem = url.searchParams.get('problem') || '';
+      const transfers = await crossRepoTransfer(env, fromRepo, toRepo, problem);
+      return new Response(JSON.stringify(transfers), { headers: jsonHeaders });
+    }
+    if (url.pathname === '/api/memory/sync' && request.method === 'POST') {
+      const body = await request.json();
+      const repos = body.repos || [];
+      const result = await fleetSync(env, repos);
+      return new Response(JSON.stringify(result), { headers: jsonHeaders });
     }
     return new Response('{"error":"Not Found"}', { status: 404, headers: jsonHeaders });
   },
