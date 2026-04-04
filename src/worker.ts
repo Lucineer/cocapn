@@ -199,6 +199,9 @@ export default {
     }
 
 
+    if (url.pathname === '/intelligence') {
+      return Response.redirect('https://fleet-orchestrator.casey-digennaro.workers.dev/api/dashboard', 302);
+    }
     return new Response('Not found', { status: 404 });
   },
 };
