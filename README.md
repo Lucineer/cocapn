@@ -1,83 +1,71 @@
-# COCAPN
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Lucineer/capitaine/master/docs/capitaine-logo.jpg" alt="Capitaine" width="120">
+</p>
 
-> The Cocapn Ecosystem Hub — part of the [Cocapn](https://cocapn.ai) ecosystem
+<h1 align="center">cocapn</h1>
 
-![Build](https://img.shields.io/badge/build-passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-1_files-blue) ![Lines](https://img.shields.io/badge/lines-80-green)
+<p align="center">Core platform. Repo-first agent runtime for local or cloud deployment.</p>
 
-## Description
+<p align="center">
+  <a href="https://github.com/Lucineer/cocapn/issues">Issues</a> ·
+  <a href="#the-fleet">The Fleet</a>
+</p>
 
-The Cocapn Ecosystem Hub. Part of the Cocapn ecosystem of AI-powered log and analysis tools.
+---
 
-## ✨ Features
+**Fleet service** · Powered by [Capitaine](https://github.com/Lucineer/capitaine) · [Cocapn](https://github.com/Lucineer/cocapn)
 
-- **Git is the database** — memory is version-controlled, auditable, portable. No external DB required.
-- **Clone it, it works** — fork → add API key → run → live agent with a website. That's it.
-- **Multi-provider LLM** — DeepSeek, OpenAI, Anthropic, or local models (Ollama/llama.cpp). Swap without rewriting.
-- **Plugin system** — extend with npm packages. Skills run hot (in-process) or cold (sandboxed). Explicit permissions.
-- **Fleet protocol** — multiple agents coordinate via A2A. Distribute tasks, share context across repos.
-- **Privacy by design** — `private.*` facts never leave the brain repo. Publishing layer enforces the boundary.
-- **Offline-first** — runs locally. Cloud is optional enhancement, not requirement.
-- **Zero lock-in** — MIT license. Your data lives in Git repos on your machine. Take it anywhere.
+A cocapn fleet service running on Cloudflare Workers.
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
-git clone https://github.com/Lucineer/cocapn.git
+gh repo fork Lucineer/cocapn --clone
 cd cocapn
-npm install
-npx wrangler dev
-```
-
-## 🤖 Claude Code Integration
-
-Optimized for Claude Code with full agent support:
-
-- **CLAUDE.md** — Complete project context, conventions, and architecture
-- **.claude/agents/** — Specialized sub-agents for exploration, architecture, and review
-- **.claude/settings.json** — Permissions and plugin configuration
-
-## 🏗️ Architecture
-
-| Component | File | Description |
-|-----------|------|-------------|
-| Worker | `src/worker.ts` | Cloudflare Worker with inline HTML |
-| BYOK | `src/lib/byok.ts` | 7 LLM providers, encrypted keys |
-| Health | `/health` | Health check endpoint |
-| Setup | `/setup` | BYOK configuration wizard |
-| Chat | `/api/chat` | LLM chat endpoint |
-| Assets | `/public/*` | KV-served images |
-
-**Zero runtime dependencies.** Pure TypeScript on Cloudflare Workers.
-
-## 🔑 BYOK (Bring Your Own Key)
-
-Supports 7 LLM providers — no vendor lock-in:
-
-- OpenAI (GPT-4, GPT-4o)
-- Anthropic (Claude 3.5, Claude 4)
-- Google (Gemini Pro, Gemini Flash)
-- DeepSeek (Chat, Reasoner)
-- Groq (Llama, Mixtral)
-- Mistral (Large, Medium)
-- OpenRouter (100+ models)
-
-Configuration discovery: URL params → Auth header → Cookie → KV → fail.
-
-## 📦 Deployment
-
-```bash
+npx wrangler login
 npx wrangler deploy
 ```
 
-Requires `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` environment variables.
+## The Fleet
 
-## 🔗 Links
 
-- 🌐 **Live**: https://cocapn.magnus-digennaro.workers.dev
-- ❤️ **Health**: https://cocapn.magnus-digennaro.workers.dev/health
-- ⚙️ **Setup**: https://cocapn.magnus-digennaro.workers.dev/setup
-- 🧠 **Cocapn**: https://cocapn.ai
+<details>
+<summary><strong>⚓ The Fleet</strong></summary>
+
+**Flagship vessels**
+
+- [cocapn.ai](https://github.com/Lucineer/capitaine)
+- [personallog.ai](https://github.com/Lucineer/personallog-ai)
+- [businesslog.ai](https://github.com/Lucineer/businesslog-ai)
+- [studylog.ai](https://github.com/Lucineer/studylog-ai)
+- [makerlog.ai](https://github.com/Lucineer/makerlog-ai)
+- [playerlog.ai](https://github.com/Lucineer/playerlog-ai)
+- [dmlog.ai](https://github.com/Lucineer/dmlog-ai)
+- [reallog.ai](https://github.com/Lucineer/reallog-ai)
+- [deckboss.ai](https://github.com/Lucineer/deckboss-ai)
+
+**Fleet services**
+
+- [Fleet Catalog](https://github.com/Lucineer/capitaine/blob/master/docs/fleet/FLEET.md)
+- [Git Agent (full)](https://github.com/Lucineer/git-agent)
+- [Cocapn Lite (minimal)](https://github.com/Lucineer/cocapn-lite)
+- [Fleet Orchestrator](https://github.com/Lucineer/fleet-orchestrator)
+- [Dead Reckoning Engine](https://github.com/Lucineer/dead-reckoning-engine)
+- [Dream Engine](https://github.com/Lucineer/dream-engine)
+- [Seed UI (5 layers)](https://github.com/Lucineer/seed-ui)
+
+**For power users**
+
+- [Cocapn Lite (tabula rasa)](https://github.com/Lucineer/cocapn-lite)
+- [Cocapn (core platform)](https://github.com/Lucineer/cocapn)
+- [ZeroClaw (framework)](https://github.com/Lucineer/zeroclaw)
+
+[View all 106 repos →](https://github.com/orgs/Lucineer/repositories)
+[Fleet manifest →](https://github.com/Lucineer/capitaine/blob/master/docs/fleet/FLEET.md)
+
+</details>
+
 
 ## License
 
-MIT — Built with ❤️ by [Superinstance](https://github.com/superinstance) & [Lucineer](https://github.com/Lucineer) (DiGennaro et al.)
+MIT · Superinstance & Lucineer (DiGennaro et al.)
